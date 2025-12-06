@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../common/constants.dart';
 import 'home/home_tab.dart';
-
+import 'trip/trip_tab.dart';
 class MobileScreen extends StatefulWidget {
   const MobileScreen({super.key});
 
@@ -14,6 +14,7 @@ class _MobileScreenState extends State<MobileScreen> {
 
   final List<Widget> _tabs = [
     const HomeTab(),
+    const TripTab(),
   ];
 
   @override
