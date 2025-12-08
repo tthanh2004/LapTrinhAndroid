@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'common/constants.dart';
 import 'controllers/trip_controller.dart';
-import 'screens/mobile/mobile_screen.dart';
+import 'screens/mobile/auth/login_screen.dart';
 
 void main() {
   runApp(
     MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => TripController()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => TripController())],
       child: const SafeTrekApp(),
     ),
   );
@@ -28,7 +26,8 @@ class SafeTrekApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
       ),
-      home: const MobileScreen(),
+      // Bắt đầu từ màn hình Đăng nhập
+      home: const LoginScreen(),
     );
   }
 }
