@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../common/constants.dart';
-
 import 'home/home_tab.dart';
 import 'trip/trip_tab.dart';
+import 'contacts/contacts_tab.dart';
 import 'settings/settings_tab.dart';
 
 class MobileScreen extends StatefulWidget {
@@ -15,26 +15,21 @@ class MobileScreen extends StatefulWidget {
 class _MobileScreenState extends State<MobileScreen> {
   int _currentIndex = 0;
 
-  late final List<Widget> _tabs;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabs = [
-      HomeTab(
-        onGoToTripSetup: () => setState(() => _currentIndex = 1),
-        onGoToContacts: () => setState(() => _currentIndex = 2),
-      ),
-      const TripTab(),
-      const SettingsTab(),
-    ];
-  }
+  final List<Widget> _tabs = [
+    const HomeTab(),
+    const TripTab(),
+    const ContactsTab(),
+    const SettingsTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: IndexedStack(index: _currentIndex, children: _tabs),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _tabs,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -43,26 +38,10 @@ class _MobileScreenState extends State<MobileScreen> {
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: "Trang chủ",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.location_on_outlined),
-            activeIcon: Icon(Icons.location_on),
-            label: "Chuyến đi",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outline),
-            activeIcon: Icon(Icons.people),
-            label: "Liên lạc",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: "Cài đặt",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Trang chủ"),
+          BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), label: "Chuyến đi"),
+          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: "Liên lạc"),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: "Cài đặt"),
         ],
       ),
     );
