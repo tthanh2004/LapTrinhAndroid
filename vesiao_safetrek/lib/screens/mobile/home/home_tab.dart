@@ -188,6 +188,7 @@ class _HomeTabState extends State<HomeTab> {
                         _buildInfoItem("Cảnh báo khẩn cấp"),
                         _buildInfoItem("Vị trí GPS chính xác"),
                         _buildInfoItem("Mức pin điện thoại"),
+                        _buildInfoItem("Thời gian cảnh báo"),
                       ]),
                     ),
                   ],
