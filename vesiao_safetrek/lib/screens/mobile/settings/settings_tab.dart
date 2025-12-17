@@ -13,7 +13,6 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _gpsTracking = true;
   bool _backgroundMode = true;
   bool _notifications = true;
-  final String _userPhone = "0912 345 678";
 
   // --- XỬ LÝ LOGOUT ---
   void _handleLogout() {
@@ -276,45 +275,6 @@ class _SettingsTabState extends State<SettingsTab> {
                 ],
               ),
               const SizedBox(height: 24),
-              // User Info
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.person, color: Colors.white),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Số điện thoại",
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                        Text(
-                          _userPhone,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -414,41 +374,6 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
               const SizedBox(height: 24),
 
-              // Info & Warning (Giữ nguyên như cũ)
-              _buildSectionTitle("Thông tin"),
-              Container(
-                decoration: _boxDecoration(),
-                child: Column(
-                  children: [
-                    _buildTile(
-                      icon: Icons.shield,
-                      iconColor: kPrimaryColor,
-                      bgColor: Colors.blue[50]!,
-                      title: "Hướng dẫn sử dụng",
-                      subtitle: "Cách sử dụng SafeTrek",
-                      onTap: () {},
-                      showArrow: true,
-                    ),
-                    const Divider(height: 1, indent: 60),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Text(
-                            "Phiên bản",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            "1.0.0 (Build 100)",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -479,7 +404,7 @@ class _SettingsTabState extends State<SettingsTab> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "SafeTrek không thay thế các dịch vụ khẩn cấp (113, 114, 115). Trong tình huống khẩn cấp thực sự, hãy gọi cảnh sát ngay lập tức.",
+                            "SafeTrek không thay thế các dịch vụ khẩn cấp (113, 114, 115).",
                             style: TextStyle(
                               color: Colors.orange[800],
                               fontSize: 13,
