@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../../../common/constants.dart';
-import '../mobile_screen.dart'; // Import màn hình chính để chuyển trang khi login thành công
+import '../mobile_screen.dart'; // Import màn hình chính của bạn
+import 'utils/auth_colors.dart';
+import 'widgets/login_form.dart';
+import 'widgets/otp_form.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,22 +12,94 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Quản lý trạng thái: false = Nhập SĐT, true = Nhập OTP
+  // --- QUẢN LÝ TRẠNG THÁI ---
   bool _showOTP = false;
-  final TextEditingController _phoneController = TextEditingController();
+  bool _isEmailMode = false; // false = SĐT, true = Gmail
 
-  // Xử lý khi nhấn "Tiếp tục"
-  void _handlePhoneSubmit() {
-    if (_phoneController.text.length >= 10) {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+
+  // Biến lưu thông báo lỗi (Validation)
+  String? _phoneError;
+  String? _emailError;
+  bool _isButtonActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneController.addListener(_checkButtonActive);
+    _emailController.addListener(_checkButtonActive);
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  // Check sơ bộ để đổi màu nút
+  void _checkButtonActive() {
+    setState(() {
+      if (_isEmailMode && _emailError != null) _emailError = null;
+      if (!_isEmailMode && _phoneError != null) _phoneError = null;
+
+      if (_isEmailMode) {
+        _isButtonActive = _emailController.text.isNotEmpty;
+      } else {
+        _isButtonActive = _phoneController.text.length >= 9;
+      }
+    });
+  }
+
+  // VALIDATE INPUT
+  bool _validateInputs() {
+    if (_isEmailMode) {
+      final email = _emailController.text.trim();
+      final gmailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$');
+      
+      if (email.isEmpty) {
+        setState(() => _emailError = "Vui lòng nhập Gmail");
+        return false;
+      } else if (!gmailRegex.hasMatch(email)) {
+        setState(() => _emailError = "Gmail không hợp lệ (VD: abc@gmail.com)");
+        return false;
+      }
+      return true;
+    } else {
+      final phone = _phoneController.text.trim();
+      final phoneRegex = RegExp(r'^(0)(3|5|7|8|9)([0-9]{8})$');
+
+      if (phone.isEmpty) {
+        setState(() => _phoneError = "Vui lòng nhập số điện thoại");
+        return false;
+      } else if (!phoneRegex.hasMatch(phone)) {
+        setState(() => _phoneError = "SĐT không hợp lệ (VD: 0912345678)");
+        return false;
+      }
+      return true;
+    }
+  }
+
+  void _handleSubmit() {
+    if (_validateInputs()) {
+      setState(() => _showOTP = true);
+    }
+  }
+
+  void _switchToMode(bool isEmail) {
+    if (_isEmailMode != isEmail) {
       setState(() {
-        _showOTP = true;
+        _isEmailMode = isEmail;
+        _isButtonActive = false;
+        _phoneError = null;
+        _emailError = null;
+        _checkButtonActive();
       });
     }
   }
 
-  // Xử lý khi đăng nhập thành công
   void _onLoginSuccess() {
-    // Chuyển sang màn hình chính (MobileScreen) và xóa lịch sử back
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const MobileScreen()),
     );
@@ -35,15 +107,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Nếu showOTP = true thì hiện màn hình OTP, ngược lại hiện màn hình nhập SĐT
+    // Nếu showOTP = true thì hiện màn hình OTP
     if (_showOTP) {
-      return OTPVerificationView(
-        phoneNumber: _phoneController.text,
+      return OtpForm(
+        contactInfo: _isEmailMode ? _emailController.text : _phoneController.text,
+        isEmailMode: _isEmailMode,
         onVerifySuccess: _onLoginSuccess,
         onBack: () => setState(() => _showOTP = false),
       );
     }
 
+    // Nếu không thì hiện màn hình Login
     return Scaffold(
       body: Stack(
         children: [
@@ -55,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)], // Blue 600-700
+                colors: [AuthColors.gradientStart, AuthColors.gradientEnd],
               ),
             ),
           ),
@@ -63,521 +137,56 @@ class _LoginScreenState extends State<LoginScreen> {
           // Content
           Column(
             children: [
-              // Header
-              const SizedBox(height: 80),
+              const SizedBox(height: 60),
               Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                width: 80,
+                height: 80,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.shield, color: Colors.white, size: 50),
+                child: const Icon(Icons.shield, color: AuthColors.gradientEnd, size: 40),
               ),
               const SizedBox(height: 16),
               const Text(
                 "SafeTrek",
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                "Vệ Sĩ Ảo Của Bạn",
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              const SizedBox(height: 40),
-
-              // Form Sheet
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(30),
-                    ),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Đăng nhập",
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: kTextColor,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "Nhập số điện thoại để tiếp tục",
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 30),
-
-                        const Text(
-                          "Số điện thoại",
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          maxLength: 10,
-                          decoration: InputDecoration(
-                            hintText: "0912345678",
-                            counterText: "", // Ẩn bộ đếm ký tự
-                            prefixIcon: const Icon(
-                              Icons.phone,
-                              color: Colors.grey,
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Why Phone Number Box
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: kPrimaryLight,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blue.shade200),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Icon(
-                                Icons.mail_outline,
-                                size: 18,
-                                color: kPrimaryColor,
-                              ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "Tại sao dùng số điện thoại?",
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF1E3A8A),
-                                      ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      "Người thân dễ nhận biết khi nhận cảnh báo: \"SĐT 09xx đang gặp nguy hiểm\"",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: kPrimaryColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Continue Button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: _handlePhoneSubmit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kPrimaryColor,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              "Tiếp tục",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Divider
-                        Row(
-                          children: const [
-                            Expanded(child: Divider()),
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                "hoặc",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                            Expanded(child: Divider()),
-                          ],
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Social Buttons
-                        _buildSocialButton(
-                          "Đăng nhập bằng Google",
-                          Icons.g_mobiledata,
-                        ), // Dùng icon tạm
-                        const SizedBox(height: 12),
-                        _buildSocialButton("Đăng nhập bằng Apple", Icons.apple),
-
-                        const SizedBox(height: 30),
-
-                        // Terms
-                        const Center(
-                          child: Text.rich(
-                            TextSpan(
-                              text: "Bằng việc đăng nhập, bạn đồng ý với ",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: "Điều khoản sử dụng",
-                                  style: TextStyle(
-                                    color: kPrimaryColor,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                TextSpan(text: " và "),
-                                TextSpan(
-                                  text: "Chính sách bảo mật",
-                                  style: TextStyle(
-                                    color: kPrimaryColor,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSocialButton(String text, IconData icon) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: OutlinedButton.icon(
-        onPressed: () {},
-        icon: Icon(icon, color: Colors.black, size: 24),
-        label: Text(
-          text,
-          style: const TextStyle(color: kTextColor, fontSize: 15),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: Colors.grey.shade300),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- OTP VIEW (Widget con) ---
-class OTPVerificationView extends StatefulWidget {
-  final String phoneNumber;
-  final VoidCallback onVerifySuccess;
-  final VoidCallback onBack;
-
-  const OTPVerificationView({
-    super.key,
-    required this.phoneNumber,
-    required this.onVerifySuccess,
-    required this.onBack,
-  });
-
-  @override
-  State<OTPVerificationView> createState() => _OTPVerificationViewState();
-}
-
-class _OTPVerificationViewState extends State<OTPVerificationView> {
-  // List chứa 6 controller cho 6 ô nhập
-  final List<TextEditingController> _controllers = List.generate(
-    6,
-    (_) => TextEditingController(),
-  );
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
-  int _resendTimer = 60;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startTimer();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendTimer > 0) {
-        setState(() => _resendTimer--);
-      } else {
-        timer.cancel();
-      }
-    });
-  }
-
-  void _onOtpChanged(String value, int index) {
-    if (value.isNotEmpty) {
-      // Nếu nhập số -> Chuyển sang ô tiếp theo
-      if (index < 5) {
-        _focusNodes[index + 1].requestFocus();
-      } else {
-        // Nếu là ô cuối cùng -> Kiểm tra OTP
-        _verifyOtp();
-      }
-    } else {
-      // Nếu xóa -> Quay lại ô trước
-      if (index > 0) {
-        _focusNodes[index - 1].requestFocus();
-      }
-    }
-  }
-
-  void _verifyOtp() {
-    String otp = _controllers.map((e) => e.text).join();
-    if (otp.length == 6) {
-      // Giả lập verify thành công sau 0.5s
-      Future.delayed(const Duration(milliseconds: 500), () {
-        widget.onVerifySuccess();
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background Gradient
-          Container(
-            height: double.infinity,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-              ),
-            ),
-          ),
-
-          Column(
-            children: [
-              const SizedBox(height: 80),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.phonelink_lock,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "Xác thực OTP",
-                style: TextStyle(
-                  color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
-                "Mã xác thực đã được gửi đến\n${widget.phoneNumber}",
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                "Vệ Sĩ Ảo của bạn",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 16,
+                ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
 
-              // White Sheet
+              // Form Sheet chứa LoginForm
               Expanded(
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.vertical(
                       top: Radius.circular(30),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        "Nhập mã OTP",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: kTextColor,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        "Vui lòng nhập mã 6 chữ số",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 30),
-
-                      // OTP Input Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(
-                          6,
-                          (index) => SizedBox(
-                            width: 45,
-                            height: 55,
-                            child: TextField(
-                              controller: _controllers[index],
-                              focusNode: _focusNodes[index],
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              maxLength: 1,
-                              onChanged: (val) => _onOtpChanged(val, index),
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              decoration: InputDecoration(
-                                counterText: "",
-                                contentPadding: EdgeInsets.zero,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                    color: kPrimaryColor,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // Resend Text
-                      if (_resendTimer > 0)
-                        Text(
-                          "Gửi lại sau ${_resendTimer}s",
-                          style: const TextStyle(color: Colors.grey),
-                        )
-                      else
-                        TextButton(
-                          onPressed: () {
-                            setState(() => _resendTimer = 60);
-                            _startTimer();
-                          },
-                          child: const Text(
-                            "Gửi lại mã",
-                            style: TextStyle(
-                              color: kPrimaryColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 20),
-                      // Demo info
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEF9C3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFFDE047)),
-                        ), // Yellow 50
-                        child: const Text(
-                          "Demo: Nhập mã 123456 để tiếp tục",
-                          style: TextStyle(
-                            color: Color(0xFF854D0E),
-                            fontSize: 13,
-                          ),
-                        ), // Yellow 800
-                      ),
-
-                      const Spacer(),
-
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: OutlinedButton(
-                          onPressed: widget.onBack,
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            "Đổi số điện thoại",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
+                  // Gọi Widget Login Form đã tách
+                  child: LoginForm(
+                    isEmailMode: _isEmailMode,
+                    phoneController: _phoneController,
+                    emailController: _emailController,
+                    phoneError: _phoneError,
+                    emailError: _emailError,
+                    isButtonActive: _isButtonActive,
+                    onSubmit: _handleSubmit,
+                    onSwitchMode: _switchToMode,
                   ),
                 ),
               ),
