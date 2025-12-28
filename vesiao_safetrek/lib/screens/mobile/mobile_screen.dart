@@ -3,6 +3,8 @@ import '../../common/constants.dart';
 import 'home/home_tab.dart';
 import 'trip/trip_tab.dart';
 import 'contacts/contacts_tab.dart';
+import 'settings/settings_tab.dart';
+
 class MobileScreen extends StatefulWidget {
   const MobileScreen({super.key});
 
@@ -17,6 +19,7 @@ class _MobileScreenState extends State<MobileScreen> {
     const HomeTab(),
     const TripTab(),
     const ContactsTab(),
+    const SettingsTab(),
   ];
 
   @override

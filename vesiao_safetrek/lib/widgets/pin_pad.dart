@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../common/constants.dart';
+import '../common/constants.dart'; 
 
 class PinPad extends StatefulWidget {
-  final Function(String) onPinSubmit;
+  // SỬA: Callback trả về String pin thay vì bool
+  final Function(String pin) onPinSubmit; 
+
   const PinPad({super.key, required this.onPinSubmit});
 
   @override
@@ -11,102 +13,123 @@ class PinPad extends StatefulWidget {
 
 class _PinPadState extends State<PinPad> {
   String pin = "";
+  String errorMessage = "";
+  bool isLoading = false; // Thêm trạng thái loading để tránh bấm nhiều lần
 
-  void _input(String num) {
-    if (pin.length < 4) setState(() => pin += num);
-    if (pin.length == 4) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        widget.onPinSubmit(pin);
+  void _handlePinInput(String digit) {
+    if (isLoading) return; // Đang check thì không cho bấm
+
+    if (pin.length < 4) {
+      setState(() {
+        pin += digit;
+        errorMessage = "";
       });
+
+      if (pin.length == 4) {
+        // Đã nhập đủ 4 số -> Gửi ra ngoài cho TripTab xử lý
+        setState(() => isLoading = true);
+        
+        // Delay nhẹ để người dùng thấy số cuối cùng hiện lên
+        Future.delayed(const Duration(milliseconds: 200), () {
+          widget.onPinSubmit(pin);
+          // Lưu ý: Không reset pin ngay ở đây, để UI cha quyết định
+          setState(() => isLoading = false);
+        });
+      }
     }
   }
 
-  void _delete() {
-    if (pin.isNotEmpty) setState(() => pin = pin.substring(0, pin.length - 1));
+  // Hàm này để cha gọi vào nếu mã sai
+  // (Nhưng ở kiến trúc đơn giản này, ta cứ reset pin khi init hoặc để cha rebuild)
+  
+  void _handleDelete() {
+    if (pin.isNotEmpty && !isLoading) setState(() => pin = pin.substring(0, pin.length - 1));
+  }
+
+  void _handleClear() {
+    if (!isLoading) setState(() => pin = "");
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.9, 
+      height: MediaQuery.of(context).size.height * 0.9, // Cao lên chút
       decoration: const BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [kPrimaryColor, Color(0xFF1D4ED8)], 
+        ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       child: Column(
         children: [
-          // --- HEADER PIN PAD ---
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: const BoxDecoration(
-              color: kPrimaryColor,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
             child: Column(
               children: [
-                Container(width: 60, height: 60, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
-                const SizedBox(height: 15),
-                const Text("Xác nhận an toàn", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
+                Container(
+                  width: 80, height: 80,
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.shield, color: Colors.white, size: 40),
+                ),
+                const SizedBox(height: 16),
+                const Text("Xác nhận an toàn", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                 const Text("Nhập mã PIN của bạn", style: TextStyle(color: Colors.white70)),
               ],
             ),
           ),
-          // --- BODY PIN PAD ---
           Expanded(
-            child: SingleChildScrollView(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  const SizedBox(height: 30),
-                  
-                  // Hiển thị chấm tròn PIN
+                  const SizedBox(height: 10),
+                  // Chấm tròn PIN
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(4, (index) => Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                      width: 50, height: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: index < pin.length ? kPrimaryColor : Colors.grey.shade300, 
-                          width: 2
+                    children: List.generate(4, (index) {
+                      bool isFilled = pin.length > index;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        width: 60, height: 60,
+                        decoration: BoxDecoration(
+                          color: isFilled ? kPrimaryColor : Colors.grey[100],
+                          border: Border.all(color: isFilled ? kPrimaryColor : Colors.grey.shade300, width: 2),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ),
-                      child: index < pin.length ? const Center(child: Text("•", style: TextStyle(fontSize: 30))) : null,
-                    )),
+                        child: isFilled ? Center(child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle))) : null,
+                      );
+                    }),
                   ),
-
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+                  // Nếu muốn hiển thị lỗi từ cha, bạn có thể truyền tham số error vào
+                  // Ở đây làm đơn giản: reset pin khi sai
+                  if (isLoading) const SizedBox(height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                   
-                  // Info Box xanh nhạt
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(color: kPrimaryLight, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blue.shade100)),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.lock_outline, size: 18, color: kPrimaryColor),
-                        SizedBox(width: 10),
-                        Expanded(child: Text("Nhập mã PIN an toàn để xác nhận. Nếu bị ép buộc, hãy nhập mã PIN khẩn cấp.", style: TextStyle(color: Color(0xFF1E3A8A), fontSize: 12))),
+                  const Spacer(),
+                  SizedBox(
+                    width: 320,
+                    child: GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 3,
+                      childAspectRatio: 1.3,
+                      mainAxisSpacing: 12, crossAxisSpacing: 12,
+                      children: [
+                        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => _buildNumBtn(num.toString(), onTap: () => _handlePinInput(num.toString()))),
+                        _buildNumBtn("C", isAction: true, fontSize: 18, onTap: _handleClear),
+                        _buildNumBtn("0", onTap: () => _handlePinInput("0")),
+                        _buildNumBtn("⌫", isAction: true, onTap: _handleDelete),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 30),
-                  
-                  // Bàn phím số
-                  Wrap(
-                    spacing: 20, runSpacing: 20, alignment: WrapAlignment.center,
-                    children: [
-                      ...['1','2','3','4','5','6','7','8','9'].map((n) => _buildBtn(n)),
-                      _buildTextBtn("Xóa", onTap: _delete),
-                      _buildBtn('0'),
-                      _buildTextBtn("←", onTap: _delete),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -116,22 +139,15 @@ class _PinPadState extends State<PinPad> {
     );
   }
 
-  Widget _buildBtn(String val) => InkWell(
-    onTap: () => _input(val),
-    child: Container(
-      width: 80, height: 80,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(16)),
-      child: Text(val, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500)),
-    ),
-  );
-
-  Widget _buildTextBtn(String text, {VoidCallback? onTap}) => InkWell(
-    onTap: onTap,
-    child: Container(
-      width: 80, height: 80,
-      alignment: Alignment.center,
-      child: Text(text, style: const TextStyle(fontSize: 16, color: kTextColor)),
-    ),
-  );
+  Widget _buildNumBtn(String text, {required VoidCallback onTap, bool isAction = false, double fontSize = 24}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16)),
+        alignment: Alignment.center,
+        child: Text(text, style: TextStyle(fontSize: fontSize, fontWeight: isAction ? FontWeight.normal : FontWeight.w600, color: kTextColor)),
+      ),
+    );
+  }
 }
