@@ -20,3 +20,7 @@ const Color kDuressPinBorder = Color(0xFFFEE2E2);
 // Mã PIN mặc định để test
 const String SAFE_PIN = "1234";
 const String DURESS_PIN = "9119";
+
+class Constants {
+  static const String baseUrl = "https://safetrek-api.onrender.com";
+}
