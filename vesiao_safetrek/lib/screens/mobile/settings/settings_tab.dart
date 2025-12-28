@@ -186,7 +186,7 @@ class _SettingsTabState extends State<SettingsTab> {
       leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle), child: Icon(icon, color: iconColor, size: 20)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-      trailing: Switch(value: value, onChanged: onChanged, activeColor: iconColor),
+      trailing: Switch(value: value, onChanged: onChanged, activeThumbColor: iconColor),
     );
   }
 }

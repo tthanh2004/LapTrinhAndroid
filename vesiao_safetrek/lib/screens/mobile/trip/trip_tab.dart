@@ -245,7 +245,7 @@ class _TripTabState extends State<TripTab> {
 
                 child: ElevatedButton.icon(
 
-                  onPressed: () => controller.startTrip(),
+                  onPressed: () => controller.startTrip(_destController.text.isEmpty ? null : _destController.text),
 
                   icon: const Icon(Icons.shield, size: 20),
 
@@ -467,14 +467,51 @@ class _TripTabState extends State<TripTab> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => PinPad(
-        onPinSubmit: (isDuress) {
-          Navigator.pop(context);
-          if (isDuress) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚠️ Đã gửi cảnh báo ngầm!")));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã xác nhận an toàn!")));
+        // Callback nhận chuỗi PIN (String)
+        onPinSubmit: (String inputPin) async {
+          
+          // 1. Gọi API Verify
+          // (PinPad đã tự hiện loading nhẹ, ở đây ta đợi kết quả)
+          String status = await controller.verifyPin(inputPin);
+
+          // Kiểm tra xem widget còn tồn tại không trước khi dùng context
+          if (!mounted) return;
+
+          // 2. Xử lý kết quả
+          if (status == 'SAFE') {
+            Navigator.pop(context); // Tắt bảng PIN
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("✅ Đã xác nhận an toàn!"), backgroundColor: Colors.green)
+            );
+            controller.stopTrip(isSafe: true);
+          } 
+          else if (status == 'DURESS') {
+            Navigator.pop(context); // Tắt bảng PIN
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("⚠️ Cảnh báo ngầm đã được gửi!"), backgroundColor: Colors.orange)
+            );
+            controller.stopTrip(isSafe: false); // Kết thúc nhưng đánh dấu duress
+          } 
+          else {
+            // Trường hợp INVALID hoặc ERROR
+            // Đóng bảng PIN cũ và hiện thông báo lỗi
+            Navigator.pop(context); 
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(status == 'INVALID' ? "❌ Mã PIN không đúng!" : "Lỗi kết nối Server"),
+                backgroundColor: Colors.red,
+              )
+            );
+            
+            // Mở lại bảng PIN để nhập lại (Hoặc bạn có thể giữ nguyên bảng PIN nếu sửa PinPad phức tạp hơn)
+            // Ở đây mình chọn cách đơn giản: Báo lỗi xong cho mở lại
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted && controller.isMonitoring) {
+                 _openPinPad(context, controller);
+              }
+            });
           }
-          controller.stopTrip();
         },
       ),
     );
