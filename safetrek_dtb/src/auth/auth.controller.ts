@@ -1,11 +1,26 @@
-import { Module } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { PrismaService } from '../prisma.service';
 
-@Module({
-  controllers: [AuthController],
-  providers: [AuthService, PrismaService],
-  exports: [AuthService], // Cho phép các module khác sử dụng nếu cần
-})
-export class AuthModule { }
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) { }
+
+  /**
+   * Endpoint: POST /auth/login-firebase
+   * Body: { "token": "chuỗi-token-từ-flutter" }
+   */
+  @Post('login-firebase')
+  async loginFirebase(@Body() body: { token: string }) {
+    return this.authService.loginWithFirebase(body.token);
+  }
+
+  @Post('send-email-otp')
+  async sendEmailOtp(@Body() body: { email: string }) {
+    return this.authService.sendEmailOtp(body.email);
+  }
+
+  @Post('verify-email-otp')
+  async verifyEmailOtp(@Body() body: { email: string; code: string }) {
+    return this.authService.verifyEmailOtp(body.email, body.code);
+  }
+}
