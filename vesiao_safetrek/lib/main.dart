@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'common/constants.dart';
 import 'controllers/trip_controller.dart';
-import 'screens/mobile/mobile_screen.dart';
+import 'screens/mobile/auth/login_screen.dart';
+import 'screens/mobile/settings/security/verify_pin_screen.dart';
+import 'screens/mobile/settings/security/create_new_pin_screen.dart';
+import 'screens/mobile/settings/profile/personal_info_screen.dart';
 
 void main() {
   runApp(
     MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => TripController()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => TripController())],
       child: const SafeTrekApp(),
     ),
   );
@@ -28,7 +29,13 @@ class SafeTrekApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
       ),
-      home: const MobileScreen(),
+      initialRoute: '/', 
+      routes: {
+        '/': (context) => const LoginScreen(),
+        '/profile': (context) => const PersonalInfoScreen(),
+        '/verify_pin': (context) => const VerifyPinScreen(),
+        '/create_pin': (context) => const CreateNewPinScreen(),
+      },
     );
   }
 }
