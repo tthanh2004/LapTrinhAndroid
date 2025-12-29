@@ -5,44 +5,22 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // 1. Đăng ký (Tạo user với mật khẩu hash)
-  @Post('register')
-  async register(
-    @Body()
-    body: {
-      phoneNumber: string;
-      password: string;
-      fullName: string;
-      email?: string;
-    },
-  ) {
-    return this.authService.register(body);
-  }
-
-  // 2. Đăng nhập bằng Mật khẩu
-  @Post('login-password')
-  async loginPassword(@Body() body: { identity: string; password: string }) {
-    return this.authService.loginWithPassword(body.identity, body.password);
-  }
-
-  // ... (Giữ nguyên các API cũ: check-login-method, login-firebase, send-otp, verify-otp)
-  @Post('check-login-method')
-  async checkLoginMethod(@Body('phoneNumber') phoneNumber: string) {
-    return this.authService.checkLoginMethod(phoneNumber);
-  }
-
+  /**
+   * Endpoint: POST /auth/login-firebase
+   * Body: { "token": "chuỗi-token-từ-flutter" }
+   */
   @Post('login-firebase')
-  async loginFirebase(@Body('token') token: string) {
-    return this.authService.loginWithFirebase(token);
+  async loginFirebase(@Body() body: { token: string }) {
+    return this.authService.loginWithFirebase(body.token);
   }
 
-  @Post('send-otp')
-  async sendOtp(@Body('email') email: string) {
-    return this.authService.sendEmailOtp(email);
+  @Post('send-email-otp')
+  async sendEmailOtp(@Body() body: { email: string }) {
+    return this.authService.sendEmailOtp(body.email);
   }
 
-  @Post('verify-otp')
-  async verifyOtp(@Body() body: { email: string; code: string }) {
+  @Post('verify-email-otp')
+  async verifyEmailOtp(@Body() body: { email: string; code: string }) {
     return this.authService.verifyEmailOtp(body.email, body.code);
   }
 }
