@@ -3,17 +3,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+
+// --- QUAN TRỌNG: Kiểm tra lại đường dẫn import 2 file này cho đúng với thư mục của bạn ---
 import '../../../common/constants.dart';
+import '../trip/trip_tab.dart'; 
+import '../contacts/contacts_tab.dart'; 
 
 class HomeTab extends StatefulWidget {
-  final VoidCallback? onGoToTripSetup;
-  final VoidCallback? onGoToContacts;
   final int userId;
 
+  // Đã bỏ các callback onGoTo... vì chúng ta xử lý chuyển trang ngay tại đây
   const HomeTab({
     super.key,
-    this.onGoToTripSetup,
-    this.onGoToContacts,
     required this.userId,
   });
 
@@ -26,6 +27,44 @@ class _HomeTabState extends State<HomeTab> {
   bool _isPressing = false;
   bool _isSending = false;
 
+  // --- HÀM ĐIỀU HƯỚNG: CÀI ĐẶT CHUYẾN ĐI ---
+  void _navigateToTripSetup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: const Text("Chuyến đi"),
+            backgroundColor: const Color(0xFF2563EB), // Màu xanh chủ đạo
+            foregroundColor: Colors.white,
+          ),
+          body: const TripTab(), // Widget TripTab bạn đã cung cấp
+        ),
+      ),
+    );
+  }
+
+  // --- HÀM ĐIỀU HƯỚNG: QUẢN LÝ DANH BẠ ---
+  void _navigateToContacts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          // Dùng AppBar trong suốt để nút Back đè lên CustomHeader đẹp hơn
+          extendBodyBehindAppBar: true, 
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white), // Nút Back màu trắng
+          ),
+          // Truyền userId vào ContactsTab
+          body: ContactsTab(userId: widget.userId), 
+        ),
+      ),
+    );
+  }
+
+  // --- LOGIC GỬI SOS ---
   Future<void> _handlePanicButton() async {
     setState(() {
       _showPanicAlert = true;
@@ -74,6 +113,7 @@ class _HomeTabState extends State<HomeTab> {
     return Scaffold(
       body: Stack(
         children: [
+          // Background Gradient
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -98,15 +138,22 @@ class _HomeTabState extends State<HomeTab> {
                           _buildSosButton(),
                           const SizedBox(height: 30),
                           _buildInfoTextBox(),
+                          
+                          // --- NÚT 1: CÀI ĐẶT CHUYẾN ĐI ---
                           _buildActionButton(
-                              icon: Icons.location_on,
-                              text: "Cài đặt chuyến đi",
-                              onTap: widget.onGoToTripSetup ?? () {}),
+                            icon: Icons.location_on,
+                            text: "Cài đặt chuyến đi",
+                            onTap: _navigateToTripSetup, // Gọi hàm điều hướng
+                          ),
+                          
                           const SizedBox(height: 16),
+                          
+                          // --- NÚT 2: QUẢN LÝ DANH BẠ ---
                           _buildActionButton(
-                              icon: Icons.people,
-                              text: "Quản lý danh bạ khẩn cấp",
-                              onTap: widget.onGoToContacts ?? () {}),
+                            icon: Icons.people,
+                            text: "Quản lý danh bạ khẩn cấp",
+                            onTap: _navigateToContacts, // Gọi hàm điều hướng
+                          ),
                         ],
                       ),
                     ),
@@ -121,9 +168,11 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
+  // --- CÁC WIDGET CON (Giữ nguyên) ---
+
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20), // Sửa lỗi padding null ở đây
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Row(
         children: [
           const Icon(Icons.shield, color: Colors.white, size: 40),
@@ -224,10 +273,10 @@ class _HomeTabState extends State<HomeTab> {
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline, size: 16, color: Colors.white70),
-          const SizedBox(width: 8),
-          const Expanded(
+        children: const [
+          Icon(Icons.info_outline, size: 16, color: Colors.white70),
+          SizedBox(width: 8),
+          Expanded(
               child: Text(
                   "Nút SOS sẽ gửi cảnh báo khẩn cấp ngay lập tức đến tất cả danh bạ khẩn cấp của bạn.",
                   style: TextStyle(color: Colors.white70, fontSize: 13))),

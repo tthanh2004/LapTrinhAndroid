@@ -89,8 +89,8 @@ export class AuthService {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'EMAIL_CUA_BAN@gmail.com', // Thay bằng email của bạn
-        pass: 'MAT_KHAU_UNG_DUNG_16_KY_TU', // Thay bằng App Password 16 ký tự
+        user: 'thanhtlu2k44@gmail.com', // Thay bằng email của bạn
+        pass: 'tezxgrcnmkdwwfoa', // Thay bằng App Password 16 ký tự
       },
     });
 
