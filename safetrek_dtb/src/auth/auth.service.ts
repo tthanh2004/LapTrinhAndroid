@@ -9,6 +9,7 @@ import * as admin from 'firebase-admin';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as nodemailer from 'nodemailer';
+import * as bcrypt from 'bcrypt'; // <--- Đã thêm thư viện mã hóa
 
 @Injectable()
 export class AuthService {
@@ -17,6 +18,107 @@ export class AuthService {
   constructor(private prisma: PrismaService) {
     this.initializeFirebase();
   }
+
+  // ==========================================
+  // PHẦN 1: CÁC HÀM BẢO MẬT (HASH & COMPARE)
+  // ==========================================
+
+  async hashPassword(plainTextPassword: string): Promise<string> {
+    const saltRounds = 10;
+    return await bcrypt.hash(plainTextPassword, saltRounds);
+  }
+
+  async isPasswordMatch(
+    plainTextPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
+    return await bcrypt.compare(plainTextPassword, hashedPassword);
+  }
+
+  // ==========================================
+  // PHẦN 2: LOGIC ĐĂNG KÝ & ĐĂNG NHẬP MẬT KHẨU
+  // ==========================================
+
+  // API Đăng ký (Để tạo user mới với mật khẩu đã mã hóa)
+  async register(body: {
+    phoneNumber: string;
+    password: string;
+    fullName: string;
+    email?: string;
+  }) {
+    // 1. Kiểm tra SĐT đã tồn tại chưa
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phoneNumber: body.phoneNumber },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Số điện thoại này đã được đăng ký.');
+    }
+
+    // 2. Mã hóa mật khẩu
+    const hashedPassword = await this.hashPassword(body.password);
+
+    // 3. Tạo user mới
+    const newUser = await this.prisma.user.create({
+      data: {
+        phoneNumber: body.phoneNumber,
+        passwordHash: hashedPassword, // Lưu vào cột passwordHash theo đúng Schema
+        fullName: body.fullName,
+        email: body.email,
+        // Các trường khác để null hoặc default
+      },
+    });
+
+    return {
+      message: 'Đăng ký thành công',
+      userId: newUser.userId,
+      fullName: newUser.fullName,
+    };
+  }
+
+  // API Đăng nhập bằng Mật khẩu
+  async loginWithPassword(identity: string, pass: string) {
+    // 1. Tìm user (check cả email HOẶC sđt)
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: identity }, { phoneNumber: identity }],
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Tài khoản không tồn tại.');
+    }
+
+    // 2. Kiểm tra xem user có mật khẩu không (Trường passwordHash trong Schema)
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'Tài khoản này chưa thiết lập mật khẩu (có thể đăng ký bằng OTP).',
+      );
+    }
+
+    // 3. So sánh mật khẩu bằng bcrypt (An toàn)
+    const isMatch = await this.isPasswordMatch(pass, user.passwordHash);
+
+    if (!isMatch) {
+      throw new BadRequestException('Mật khẩu không chính xác.');
+    }
+
+    // 4. Trả về kết quả
+    return {
+      message: 'Đăng nhập thành công',
+      user: {
+        userId: user.userId,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  }
+
+  // ==========================================
+  // PHẦN 3: CÁC LOGIC CŨ (FIREBASE, OTP)
+  // ==========================================
 
   private initializeFirebase() {
     if (admin.apps.length === 0) {
@@ -54,18 +156,14 @@ export class AuthService {
       try {
         this.logger.log(`🔍 Tìm thấy email ${user.email}. Đang gửi OTP...`);
         await this.sendEmailOtp(user.email);
-
         return {
           method: 'EMAIL',
           message: `Mã OTP đã gửi tới ${this.maskEmail(user.email)}`,
           target: user.email,
         };
       } catch (error) {
-        // --- SỬA LỖI 1: Xử lý error message an toàn ---
         let errorMessage = 'Unknown error';
-        if (error instanceof Error) {
-          errorMessage = error.message;
-        }
+        if (error instanceof Error) errorMessage = error.message;
         this.logger.warn(
           `⚠️ Gửi mail thất bại, chuyển sang SMS. Lỗi: ${errorMessage}`,
         );
@@ -83,7 +181,6 @@ export class AuthService {
     try {
       const decodedToken = await admin.auth().verifyIdToken(token);
       const phoneNumber = decodedToken.phone_number;
-      // --- SỬA LỖI 2: Xóa biến firebaseUid thừa ---
 
       if (!phoneNumber) {
         throw new UnauthorizedException(
@@ -149,24 +246,18 @@ export class AuthService {
       where: { email: email },
       data: { otpCode: otp, otpExpiry: expiry },
     });
-
     return true;
   }
 
   async verifyEmailOtp(email: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user) {
+    if (!user)
       throw new BadRequestException('Không tìm thấy tài khoản email này.');
-    }
-
-    if (user.otpCode !== code) {
+    if (user.otpCode !== code)
       throw new BadRequestException('Mã OTP không chính xác.');
-    }
-
-    if (user.otpExpiry && new Date() > user.otpExpiry) {
-      throw new BadRequestException('Mã OTP đã hết hạn. Vui lòng lấy mã mới.');
-    }
+    if (user.otpExpiry && new Date() > user.otpExpiry)
+      throw new BadRequestException('Mã OTP đã hết hạn.');
 
     const updatedUser = await this.prisma.user.update({
       where: { userId: user.userId },
@@ -186,49 +277,8 @@ export class AuthService {
   private maskEmail(email: string): string {
     if (!email) return '';
     const [name, domain] = email.split('@');
-    if (name.length <= 2) {
-      return `${name}***@${domain}`;
-    }
-    return `${name.substring(0, 2)}***@${domain}`;
-  }
-
-  async loginWithPassword(identity: string, pass: string) {
-    // 1. Tìm user (check cả email HOẶC sđt)
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: identity }, { phoneNumber: identity }],
-      },
-    });
-
-    if (!user) {
-      throw new BadRequestException('Tài khoản không tồn tại.');
-    }
-
-    // 2. Kiểm tra mật khẩu
-    // Lưu ý: User tạo bằng OTP trước đây có thể chưa có password
-    if (!user.passwordHash) {
-      throw new BadRequestException(
-        'Tài khoản này chưa thiết lập mật khẩu (đăng ký bằng OTP).',
-      );
-    }
-
-    // So sánh mật khẩu (Dùng bcrypt nếu bạn đã mã hóa, hoặc so sánh thường nếu chưa)
-    // const isMatch = await bcrypt.compare(pass, user.password);
-    const isMatch = pass === user.passwordHash; // Tạm thời so sánh chuỗi thô (Nên đổi sang bcrypt sau)
-
-    if (!isMatch) {
-      throw new BadRequestException('Mật khẩu không chính xác.');
-    }
-
-    // 3. Trả về thông tin user
-    return {
-      message: 'Đăng nhập thành công',
-      user: {
-        userId: user.userId,
-        fullName: user.fullName,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-      },
-    };
+    return name.length <= 2
+      ? `${name}***@${domain}`
+      : `${name.substring(0, 2)}***@${domain}`;
   }
 }

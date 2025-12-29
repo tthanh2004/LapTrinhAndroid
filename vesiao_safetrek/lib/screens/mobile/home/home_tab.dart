@@ -4,18 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
-// --- QUAN TRỌNG: Kiểm tra lại đường dẫn import 2 file này cho đúng với thư mục của bạn ---
 import '../../../common/constants.dart';
-import '../trip/trip_tab.dart'; 
-import '../contacts/contacts_tab.dart'; 
+// Không cần import TripTab hay ContactsTab ở đây nữa vì MobileScreen lo rồi
 
 class HomeTab extends StatefulWidget {
   final int userId;
+  final VoidCallback onGoToTrip;     // [MỚI] Hàm callback để chuyển sang tab Trip
+  final VoidCallback onGoToContacts; // [MỚI] Hàm callback để chuyển sang tab Contacts
 
-  // Đã bỏ các callback onGoTo... vì chúng ta xử lý chuyển trang ngay tại đây
   const HomeTab({
     super.key,
     required this.userId,
+    required this.onGoToTrip,
+    required this.onGoToContacts,
   });
 
   @override
@@ -26,43 +27,6 @@ class _HomeTabState extends State<HomeTab> {
   bool _showPanicAlert = false;
   bool _isPressing = false;
   bool _isSending = false;
-
-  // --- HÀM ĐIỀU HƯỚNG: CÀI ĐẶT CHUYẾN ĐI ---
-  void _navigateToTripSetup() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(
-            title: const Text("Chuyến đi"),
-            backgroundColor: const Color(0xFF2563EB), // Màu xanh chủ đạo
-            foregroundColor: Colors.white,
-          ),
-          body: const TripTab(), // Widget TripTab bạn đã cung cấp
-        ),
-      ),
-    );
-  }
-
-  // --- HÀM ĐIỀU HƯỚNG: QUẢN LÝ DANH BẠ ---
-  void _navigateToContacts() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          // Dùng AppBar trong suốt để nút Back đè lên CustomHeader đẹp hơn
-          extendBodyBehindAppBar: true, 
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            iconTheme: const IconThemeData(color: Colors.white), // Nút Back màu trắng
-          ),
-          // Truyền userId vào ContactsTab
-          body: ContactsTab(userId: widget.userId), 
-        ),
-      ),
-    );
-  }
 
   // --- LOGIC GỬI SOS ---
   Future<void> _handlePanicButton() async {
@@ -143,7 +107,7 @@ class _HomeTabState extends State<HomeTab> {
                           _buildActionButton(
                             icon: Icons.location_on,
                             text: "Cài đặt chuyến đi",
-                            onTap: _navigateToTripSetup, // Gọi hàm điều hướng
+                            onTap: widget.onGoToTrip, // Gọi callback của cha
                           ),
                           
                           const SizedBox(height: 16),
@@ -152,7 +116,7 @@ class _HomeTabState extends State<HomeTab> {
                           _buildActionButton(
                             icon: Icons.people,
                             text: "Quản lý danh bạ khẩn cấp",
-                            onTap: _navigateToContacts, // Gọi hàm điều hướng
+                            onTap: widget.onGoToContacts, // Gọi callback của cha
                           ),
                         ],
                       ),
@@ -168,7 +132,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // --- CÁC WIDGET CON (Giữ nguyên) ---
+  // --- CÁC WIDGET CON ---
 
   Widget _buildHeader() {
     return Padding(

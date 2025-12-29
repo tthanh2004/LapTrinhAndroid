@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // Nhớ import http
+import 'package:http/http.dart' as http;
 import 'package:vesiao_safetrek/screens/mobile/auth/utils/auth_colors.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/widgets/login_form.dart';
 import 'package:vesiao_safetrek/screens/mobile/mobile_screen.dart';
@@ -14,12 +14,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isEmailMode = false;
+  // [SỬA Ở ĐÂY] Đổi thành true để mặc định là Email
+  bool _isEmailMode = true; 
   bool _isLoading = false;
 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  // [MỚI] Controller cho mật khẩu
   final TextEditingController _passwordController = TextEditingController();
 
   String? _phoneError;
@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       bool isIdentityValid = _isEmailMode
           ? _emailController.text.isNotEmpty
           : _phoneController.text.length >= 9;
-      // [MỚI] Check thêm mật khẩu
+      
       bool isPasswordValid = _passwordController.text.length >= 6;
       
       _isButtonActive = isIdentityValid && isPasswordValid;
@@ -76,18 +76,15 @@ class _LoginScreenState extends State<LoginScreen> {
     return true;
   }
 
-  // [THAY ĐỔI] Logic Login mới dùng Password
   void _handleLogin() async {
     if (!_validateInputs()) return;
 
     setState(() => _isLoading = true);
 
-    // Lấy email hoặc sđt tùy theo mode
     String identity = _isEmailMode 
         ? _emailController.text.trim() 
         : _phoneController.text.trim();
     
-    // Nếu là sđt, format lại cho khớp database (nếu cần)
     if (!_isEmailMode && identity.startsWith("0")) {
        identity = "+84${identity.substring(1)}";
     }
@@ -106,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        int userId = data['user']['userId']; // Lấy ID từ response mới
+        int userId = data['user']['userId'];
         _onLoginSuccess(userId);
       } else {
         final errorData = jsonDecode(response.body);
@@ -135,7 +132,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Không còn kiểm tra _showOTP nữa
     return Scaffold(
       body: Stack(
         children: [
@@ -172,11 +168,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             isEmailMode: _isEmailMode,
                             phoneController: _phoneController,
                             emailController: _emailController,
-                            passwordController: _passwordController, // Truyền vào
+                            passwordController: _passwordController,
                             phoneError: _phoneError,
                             emailError: _emailError,
                             isButtonActive: _isButtonActive,
-                            onSubmit: _handleLogin, // Gọi hàm login mới
+                            onSubmit: _handleLogin,
                             onSwitchMode: (val) => setState(() {
                               _isEmailMode = val;
                               _checkButtonActive();

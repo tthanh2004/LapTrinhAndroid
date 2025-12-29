@@ -5,34 +5,44 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // 1. API Check xem nên dùng Email hay SMS
+  // 1. Đăng ký (Tạo user với mật khẩu hash)
+  @Post('register')
+  async register(
+    @Body()
+    body: {
+      phoneNumber: string;
+      password: string;
+      fullName: string;
+      email?: string;
+    },
+  ) {
+    return this.authService.register(body);
+  }
+
+  // 2. Đăng nhập bằng Mật khẩu
+  @Post('login-password')
+  async loginPassword(@Body() body: { identity: string; password: string }) {
+    return this.authService.loginWithPassword(body.identity, body.password);
+  }
+
+  // ... (Giữ nguyên các API cũ: check-login-method, login-firebase, send-otp, verify-otp)
   @Post('check-login-method')
   async checkLoginMethod(@Body('phoneNumber') phoneNumber: string) {
     return this.authService.checkLoginMethod(phoneNumber);
   }
 
-  // 2. API Đăng nhập bằng Token Firebase (Khi dùng SMS)
   @Post('login-firebase')
   async loginFirebase(@Body('token') token: string) {
-    // Token này là ID Token mà Flutter gửi lên sau khi đăng nhập thành công với Firebase
     return this.authService.loginWithFirebase(token);
   }
 
-  // 3. API Gửi OTP Email (Cho trường hợp login bằng Gmail trực tiếp)
   @Post('send-otp')
   async sendOtp(@Body('email') email: string) {
     return this.authService.sendEmailOtp(email);
   }
 
-  // 4. API Xác thực OTP Email
   @Post('verify-otp')
   async verifyOtp(@Body() body: { email: string; code: string }) {
     return this.authService.verifyEmailOtp(body.email, body.code);
-  }
-
-  @Post('login-password')
-  async loginPassword(@Body() body: { identity: string; password: string }) {
-    // identity có thể là email hoặc số điện thoại
-    return this.authService.loginWithPassword(body.identity, body.password);
   }
 }
