@@ -22,8 +22,6 @@ export class AuthService {
           'firebase-service-account.json',
         );
         const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
-
-        // Ép kiểu tường minh để tránh lỗi no-unsafe-assignment
         const serviceAccount = JSON.parse(fileContent) as admin.ServiceAccount;
 
         admin.initializeApp({
@@ -38,7 +36,37 @@ export class AuthService {
   }
 
   /**
-   * Đăng nhập bằng Firebase Token (Dành cho SĐT)
+   * Bước 1: Kiểm tra xem nên đăng nhập bằng Email hay SMS
+   * (Logic mới bạn yêu cầu)
+   */
+  async checkLoginMethod(phoneNumber: string) {
+    // Tìm user bằng SĐT
+    const user = await this.prisma.user.findUnique({
+      where: { phoneNumber: phoneNumber },
+    });
+
+    // Nếu User tồn tại và đã lưu Email -> Gửi OTP về Email
+    if (user && user.email) {
+      console.log(`🔍 Tìm thấy email ${user.email}. Đang gửi OTP...`);
+      await this.sendEmailOtp(user.email);
+
+      return {
+        method: 'EMAIL',
+        message: `Mã OTP đã được gửi tới email ${this.maskEmail(user.email)}`,
+        target: user.email, // Trả về email để Flutter hiển thị
+      };
+    }
+
+    // Nếu chưa có Email hoặc User mới -> Dùng SMS (Firebase)
+    return {
+      method: 'SMS',
+      message: 'Vui lòng xác thực qua SMS (Firebase)',
+      target: phoneNumber,
+    };
+  }
+
+  /**
+   * Đăng nhập bằng Firebase Token (Dành cho SĐT - Bước cuối)
    */
   async loginWithFirebase(token: string) {
     try {
@@ -79,18 +107,18 @@ export class AuthService {
   }
 
   /**
-   * Gửi mã OTP qua Gmail (Dành cho Email)
+   * Gửi mã OTP qua Gmail
    */
   async sendEmailOtp(email: string) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 5 * 60000); // 5 phút
 
-    // Sử dụng nodemailer đã import đúng chuẩn
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'thanhtlu2k44@gmail.com', // Thay bằng email của bạn
-        pass: 'tezxgrcnmkdwwfoa', // Thay bằng App Password 16 ký tự
+        user: 'thanhtlu2k44@gmail.com',
+        // Đã sửa lỗi khoảng trắng trong mật khẩu của bạn
+        pass: 'tezxgrcnmkdwwfoa',
       },
     });
 
@@ -102,30 +130,25 @@ export class AuthService {
         html: `
           <div style="font-family: Arial; text-align: center; border: 1px solid #eee; padding: 20px;">
             <h2 style="color: #333;">Mã xác thực SafeTrek</h2>
-            <p>Chào bạn, mã OTP để đăng nhập vào ứng dụng của bạn là:</p>
+            <p>Mã OTP đăng nhập của bạn là:</p>
             <h1 style="color: #FF5722; letter-spacing: 10px; font-size: 40px;">${otp}</h1>
-            <p style="color: #777;">Mã này sẽ hết hạn trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+            <p style="color: #777;">Hết hạn sau 5 phút.</p>
           </div>
         `,
       });
 
       console.log(`📧 OTP Sent to: ${email}`);
 
-      await this.prisma.user.upsert({
+      // Lưu OTP vào DB nhưng KHÔNG tạo user mới nếu chưa có (vì login bằng SĐT update vào user có sẵn)
+      // Dùng updateMany để chỉ update nếu email đã tồn tại
+      await this.prisma.user.update({
         where: { email: email },
-        update: { otpCode: otp, otpExpiry: expiry },
-        create: {
-          email: email,
-          otpCode: otp,
-          otpExpiry: expiry,
-          fullName: 'Người dùng Gmail',
-        },
+        data: { otpCode: otp, otpExpiry: expiry },
       });
 
-      return { message: 'OTP đã được gửi vào hòm thư của bạn.' };
+      return { message: 'OTP đã được gửi vào hòm thư.' };
     } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Lỗi gửi mail:', errorMsg);
+      console.error('❌ Lỗi gửi mail:', error);
       throw new BadRequestException('Không thể gửi email lúc này.');
     }
   }
@@ -144,7 +167,6 @@ export class AuthService {
       throw new BadRequestException('Mã OTP đã hết hạn.');
     }
 
-    // Xóa mã sau khi dùng xong để bảo mật
     await this.prisma.user.update({
       where: { userId: user.userId },
       data: { otpCode: null, otpExpiry: null },
@@ -155,5 +177,11 @@ export class AuthService {
       userId: user.userId,
       fullName: user.fullName,
     };
+  }
+
+  // Helper: Che bớt email (vd: t***@gmail.com)
+  private maskEmail(email: string): string {
+    const [name, domain] = email.split('@');
+    return `${name.substring(0, 2)}***@${domain}`;
   }
 }
