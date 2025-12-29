@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as admin from 'firebase-admin';
@@ -11,6 +12,8 @@ import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(private prisma: PrismaService) {
     this.initializeFirebase();
   }
@@ -18,9 +21,16 @@ export class AuthService {
   private initializeFirebase() {
     if (admin.apps.length === 0) {
       try {
-        const serviceAccountPath = path.resolve(
+        const serviceAccountPath = path.join(
+          process.cwd(),
           'firebase-service-account.json',
         );
+
+        if (!fs.existsSync(serviceAccountPath)) {
+          this.logger.error(`❌ Không tìm thấy file: ${serviceAccountPath}`);
+          return;
+        }
+
         const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
         const serviceAccount = JSON.parse(fileContent) as admin.ServiceAccount;
 
@@ -28,56 +38,60 @@ export class AuthService {
           credential: admin.credential.cert(serviceAccount),
         });
 
-        console.log('🔥 Firebase Admin initialized');
+        this.logger.log('🔥 Firebase Admin initialized thành công');
       } catch (error) {
-        console.error('❌ Failed to initialize Firebase Admin:', error);
+        this.logger.error('❌ Lỗi khởi tạo Firebase:', error);
       }
     }
   }
 
-  /**
-   * Bước 1: Kiểm tra xem nên đăng nhập bằng Email hay SMS
-   * (Logic mới bạn yêu cầu)
-   */
   async checkLoginMethod(phoneNumber: string) {
-    // Tìm user bằng SĐT
     const user = await this.prisma.user.findUnique({
       where: { phoneNumber: phoneNumber },
     });
 
-    // Nếu User tồn tại và đã lưu Email -> Gửi OTP về Email
     if (user && user.email) {
-      console.log(`🔍 Tìm thấy email ${user.email}. Đang gửi OTP...`);
-      await this.sendEmailOtp(user.email);
+      try {
+        this.logger.log(`🔍 Tìm thấy email ${user.email}. Đang gửi OTP...`);
+        await this.sendEmailOtp(user.email);
 
-      return {
-        method: 'EMAIL',
-        message: `Mã OTP đã được gửi tới email ${this.maskEmail(user.email)}`,
-        target: user.email, // Trả về email để Flutter hiển thị
-      };
+        return {
+          method: 'EMAIL',
+          message: `Mã OTP đã gửi tới ${this.maskEmail(user.email)}`,
+          target: user.email,
+        };
+      } catch (error) {
+        // --- SỬA LỖI 1: Xử lý error message an toàn ---
+        let errorMessage = 'Unknown error';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        this.logger.warn(
+          `⚠️ Gửi mail thất bại, chuyển sang SMS. Lỗi: ${errorMessage}`,
+        );
+      }
     }
 
-    // Nếu chưa có Email hoặc User mới -> Dùng SMS (Firebase)
     return {
       method: 'SMS',
-      message: 'Vui lòng xác thực qua SMS (Firebase)',
+      message: 'Vui lòng xác thực bằng SMS (Firebase)',
       target: phoneNumber,
     };
   }
 
-  /**
-   * Đăng nhập bằng Firebase Token (Dành cho SĐT - Bước cuối)
-   */
   async loginWithFirebase(token: string) {
     try {
       const decodedToken = await admin.auth().verifyIdToken(token);
       const phoneNumber = decodedToken.phone_number;
+      // --- SỬA LỖI 2: Xóa biến firebaseUid thừa ---
 
       if (!phoneNumber) {
-        throw new UnauthorizedException('Token không chứa số điện thoại');
+        throw new UnauthorizedException(
+          'Token không chứa số điện thoại hợp lệ',
+        );
       }
 
-      console.log(`✅ Xác thực Firebase thành công: ${phoneNumber}`);
+      this.logger.log(`✅ Xác thực Firebase OK: ${phoneNumber}`);
 
       const user = await this.prisma.user.upsert({
         where: { phoneNumber: phoneNumber },
@@ -90,98 +104,91 @@ export class AuthService {
 
       return {
         message: 'Đăng nhập thành công',
-        userId: user.userId,
-        phoneNumber: user.phoneNumber,
-        fullName: user.fullName,
+        user: {
+          userId: user.userId,
+          phoneNumber: user.phoneNumber,
+          fullName: user.fullName,
+          email: user.email,
+        },
       };
-    } catch (error: unknown) {
-      let errorMessage = 'Unknown error';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      console.error('❌ Lỗi Firebase Admin:', errorMessage);
-      throw new UnauthorizedException(
-        'Mã xác thực không hợp lệ hoặc đã hết hạn',
-      );
+    } catch (error) {
+      this.logger.error('❌ Lỗi Firebase Admin:', error);
+      throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
     }
   }
 
-  /**
-   * Gửi mã OTP qua Gmail
-   */
   async sendEmailOtp(email: string) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 5 * 60000); // 5 phút
+    const expiry = new Date(Date.now() + 5 * 60000);
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: 'thanhtlu2k44@gmail.com',
-        // Đã sửa lỗi khoảng trắng trong mật khẩu của bạn
         pass: 'tezxgrcnmkdwwfoa',
       },
     });
 
-    try {
-      await transporter.sendMail({
-        from: '"SafeTrek Support" <no-reply@safetrek.com>',
-        to: email,
-        subject: 'Mã xác thực đăng nhập SafeTrek',
-        html: `
-          <div style="font-family: Arial; text-align: center; border: 1px solid #eee; padding: 20px;">
-            <h2 style="color: #333;">Mã xác thực SafeTrek</h2>
-            <p>Mã OTP đăng nhập của bạn là:</p>
-            <h1 style="color: #FF5722; letter-spacing: 10px; font-size: 40px;">${otp}</h1>
-            <p style="color: #777;">Hết hạn sau 5 phút.</p>
-          </div>
-        `,
-      });
+    await transporter.sendMail({
+      from: '"SafeTrek Security" <no-reply@safetrek.com>',
+      to: email,
+      subject: 'Mã xác thực đăng nhập SafeTrek',
+      html: `
+        <div style="font-family: Arial, sans-serif; text-align: center; border: 1px solid #ddd; padding: 20px; border-radius: 10px; max-width: 500px; margin: auto;">
+          <h2 style="color: #2c3e50;">Mã OTP của bạn</h2>
+          <p>Sử dụng mã dưới đây để đăng nhập vào SafeTrek:</p>
+          <h1 style="color: #e74c3c; letter-spacing: 5px; font-size: 32px; margin: 20px 0;">${otp}</h1>
+          <p style="color: #7f8c8d; font-size: 12px;">Mã có hiệu lực trong 5 phút.</p>
+        </div>
+      `,
+    });
 
-      console.log(`📧 OTP Sent to: ${email}`);
+    this.logger.log(`📧 Đã gửi OTP tới: ${email}`);
 
-      // Lưu OTP vào DB nhưng KHÔNG tạo user mới nếu chưa có (vì login bằng SĐT update vào user có sẵn)
-      // Dùng updateMany để chỉ update nếu email đã tồn tại
-      await this.prisma.user.update({
-        where: { email: email },
-        data: { otpCode: otp, otpExpiry: expiry },
-      });
+    await this.prisma.user.update({
+      where: { email: email },
+      data: { otpCode: otp, otpExpiry: expiry },
+    });
 
-      return { message: 'OTP đã được gửi vào hòm thư.' };
-    } catch (error: unknown) {
-      console.error('❌ Lỗi gửi mail:', error);
-      throw new BadRequestException('Không thể gửi email lúc này.');
-    }
+    return true;
   }
 
-  /**
-   * Xác thực mã OTP Gmail
-   */
   async verifyEmailOtp(email: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user || user.otpCode !== code) {
-      throw new BadRequestException('Mã OTP không đúng.');
+    if (!user) {
+      throw new BadRequestException('Không tìm thấy tài khoản email này.');
+    }
+
+    if (user.otpCode !== code) {
+      throw new BadRequestException('Mã OTP không chính xác.');
     }
 
     if (user.otpExpiry && new Date() > user.otpExpiry) {
-      throw new BadRequestException('Mã OTP đã hết hạn.');
+      throw new BadRequestException('Mã OTP đã hết hạn. Vui lòng lấy mã mới.');
     }
 
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { userId: user.userId },
       data: { otpCode: null, otpExpiry: null },
     });
 
     return {
       message: 'Đăng nhập thành công',
-      userId: user.userId,
-      fullName: user.fullName,
+      user: {
+        userId: updatedUser.userId,
+        fullName: updatedUser.fullName,
+        phoneNumber: updatedUser.phoneNumber,
+      },
     };
   }
 
-  // Helper: Che bớt email (vd: t***@gmail.com)
   private maskEmail(email: string): string {
+    if (!email) return '';
     const [name, domain] = email.split('@');
+    if (name.length <= 2) {
+      return `${name}***@${domain}`;
+    }
     return `${name.substring(0, 2)}***@${domain}`;
   }
 }

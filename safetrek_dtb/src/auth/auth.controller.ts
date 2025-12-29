@@ -14,6 +14,7 @@ export class AuthController {
   // 2. API Đăng nhập bằng Token Firebase (Khi dùng SMS)
   @Post('login-firebase')
   async loginFirebase(@Body('token') token: string) {
+    // Token này là ID Token mà Flutter gửi lên sau khi đăng nhập thành công với Firebase
     return this.authService.loginWithFirebase(token);
   }
 
