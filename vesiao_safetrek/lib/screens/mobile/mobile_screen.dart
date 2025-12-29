@@ -6,7 +6,9 @@ import 'contacts/contacts_tab.dart';
 import 'settings/settings_tab.dart';
 
 class MobileScreen extends StatefulWidget {
-  const MobileScreen({super.key});
+  final int userId; 
+
+  const MobileScreen({super.key, required this.userId});
 
   @override
   State<MobileScreen> createState() => _MobileScreenState();
@@ -14,13 +16,19 @@ class MobileScreen extends StatefulWidget {
 
 class _MobileScreenState extends State<MobileScreen> {
   int _currentIndex = 0;
+  late List<Widget> _tabs; 
 
-  final List<Widget> _tabs = [
-    const HomeTab(),
-    const TripTab(),
-    const ContactsTab(),
-    const SettingsTab(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Khởi tạo tabs ngay khi vào màn hình với userId nhận được
+    _tabs = [
+      HomeTab(userId: widget.userId), 
+      const TripTab(),
+      ContactsTab(userId: widget.userId),
+      const SettingsTab(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
