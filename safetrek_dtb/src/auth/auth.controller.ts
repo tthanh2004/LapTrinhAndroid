@@ -29,4 +29,10 @@ export class AuthController {
   async verifyOtp(@Body() body: { email: string; code: string }) {
     return this.authService.verifyEmailOtp(body.email, body.code);
   }
+
+  @Post('login-password')
+  async loginPassword(@Body() body: { identity: string; password: string }) {
+    // identity có thể là email hoặc số điện thoại
+    return this.authService.loginWithPassword(body.identity, body.password);
+  }
 }

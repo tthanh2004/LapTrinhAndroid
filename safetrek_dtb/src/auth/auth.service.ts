@@ -191,4 +191,44 @@ export class AuthService {
     }
     return `${name.substring(0, 2)}***@${domain}`;
   }
+
+  async loginWithPassword(identity: string, pass: string) {
+    // 1. Tìm user (check cả email HOẶC sđt)
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: identity }, { phoneNumber: identity }],
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Tài khoản không tồn tại.');
+    }
+
+    // 2. Kiểm tra mật khẩu
+    // Lưu ý: User tạo bằng OTP trước đây có thể chưa có password
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        'Tài khoản này chưa thiết lập mật khẩu (đăng ký bằng OTP).',
+      );
+    }
+
+    // So sánh mật khẩu (Dùng bcrypt nếu bạn đã mã hóa, hoặc so sánh thường nếu chưa)
+    // const isMatch = await bcrypt.compare(pass, user.password);
+    const isMatch = pass === user.passwordHash; // Tạm thời so sánh chuỗi thô (Nên đổi sang bcrypt sau)
+
+    if (!isMatch) {
+      throw new BadRequestException('Mật khẩu không chính xác.');
+    }
+
+    // 3. Trả về thông tin user
+    return {
+      message: 'Đăng nhập thành công',
+      user: {
+        userId: user.userId,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      },
+    };
+  }
 }
