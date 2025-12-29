@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../mobile_screen.dart'; // Import màn hình chính của bạn
-import 'utils/auth_colors.dart';
-import 'widgets/login_form.dart';
-import 'widgets/otp_form.dart';
+import 'package:http/http.dart' as http;
+import 'package:vesiao_safetrek/screens/mobile/auth/utils/auth_colors.dart';
+import 'package:vesiao_safetrek/screens/mobile/auth/widgets/login_form.dart';
+import 'package:vesiao_safetrek/screens/mobile/mobile_screen.dart';
+import 'package:vesiao_safetrek/common/constants.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,14 +14,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // --- QUẢN LÝ TRẠNG THÁI ---
-  bool _showOTP = false;
-  bool _isEmailMode = false; // false = SĐT, true = Gmail
+  // [SỬA Ở ĐÂY] Đổi thành true để mặc định là Email
+  bool _isEmailMode = true; 
+  bool _isLoading = false;
 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
-  // Biến lưu thông báo lỗi (Validation)
   String? _phoneError;
   String? _emailError;
   bool _isButtonActive = false;
@@ -29,102 +31,111 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _phoneController.addListener(_checkButtonActive);
     _emailController.addListener(_checkButtonActive);
+    _passwordController.addListener(_checkButtonActive);
   }
 
   @override
   void dispose() {
     _phoneController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  // Check sơ bộ để đổi màu nút
   void _checkButtonActive() {
     setState(() {
-      if (_isEmailMode && _emailError != null) _emailError = null;
-      if (!_isEmailMode && _phoneError != null) _phoneError = null;
-
-      if (_isEmailMode) {
-        _isButtonActive = _emailController.text.isNotEmpty;
-      } else {
-        _isButtonActive = _phoneController.text.length >= 9;
-      }
+      bool isIdentityValid = _isEmailMode
+          ? _emailController.text.isNotEmpty
+          : _phoneController.text.length >= 9;
+      
+      bool isPasswordValid = _passwordController.text.length >= 6;
+      
+      _isButtonActive = isIdentityValid && isPasswordValid;
     });
   }
 
-  // VALIDATE INPUT
   bool _validateInputs() {
+    setState(() {
+      _phoneError = null;
+      _emailError = null;
+    });
+
     if (_isEmailMode) {
       final email = _emailController.text.trim();
-      final gmailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$');
-      
-      if (email.isEmpty) {
-        setState(() => _emailError = "Vui lòng nhập Gmail");
-        return false;
-      } else if (!gmailRegex.hasMatch(email)) {
-        setState(() => _emailError = "Gmail không hợp lệ (VD: abc@gmail.com)");
+      if (!RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$').hasMatch(email)) {
+        setState(() => _emailError = "Vui lòng nhập đúng định dạng Gmail");
         return false;
       }
-      return true;
     } else {
       final phone = _phoneController.text.trim();
-      final phoneRegex = RegExp(r'^(0)(3|5|7|8|9)([0-9]{8})$');
-
-      if (phone.isEmpty) {
-        setState(() => _phoneError = "Vui lòng nhập số điện thoại");
-        return false;
-      } else if (!phoneRegex.hasMatch(phone)) {
-        setState(() => _phoneError = "SĐT không hợp lệ (VD: 0912345678)");
+      if (!RegExp(r'^(0?)(3|5|7|8|9)([0-9]{8})$').hasMatch(phone)) {
+        setState(() => _phoneError = "SĐT không hợp lệ");
         return false;
       }
-      return true;
+    }
+    return true;
+  }
+
+  void _handleLogin() async {
+    if (!_validateInputs()) return;
+
+    setState(() => _isLoading = true);
+
+    String identity = _isEmailMode 
+        ? _emailController.text.trim() 
+        : _phoneController.text.trim();
+    
+    if (!_isEmailMode && identity.startsWith("0")) {
+       identity = "+84${identity.substring(1)}";
+    }
+
+    final String password = _passwordController.text;
+
+    try {
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}/auth/login-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'identity': identity,
+          'password': password,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        int userId = data['user']['userId'];
+        _onLoginSuccess(userId);
+      } else {
+        final errorData = jsonDecode(response.body);
+        _showError(errorData['message'] ?? "Đăng nhập thất bại");
+      }
+    } catch (e) {
+      _showError("Lỗi kết nối máy chủ: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _handleSubmit() {
-    if (_validateInputs()) {
-      setState(() => _showOTP = true);
+  void _showError(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
     }
   }
 
-  void _switchToMode(bool isEmail) {
-    if (_isEmailMode != isEmail) {
-      setState(() {
-        _isEmailMode = isEmail;
-        _isButtonActive = false;
-        _phoneError = null;
-        _emailError = null;
-        _checkButtonActive();
-      });
-    }
-  }
-
-  void _onLoginSuccess() {
+  void _onLoginSuccess(int userId) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const MobileScreen()),
+      MaterialPageRoute(builder: (context) => MobileScreen(userId: userId)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Nếu showOTP = true thì hiện màn hình OTP
-    if (_showOTP) {
-      return OtpForm(
-        contactInfo: _isEmailMode ? _emailController.text : _phoneController.text,
-        isEmailMode: _isEmailMode,
-        onVerifySuccess: _onLoginSuccess,
-        onBack: () => setState(() => _showOTP = false),
-      );
-    }
-
-    // Nếu không thì hiện màn hình Login
     return Scaffold(
       body: Stack(
         children: [
-          // Background Gradient
           Container(
-            height: double.infinity,
-            width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -133,64 +144,46 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-
-          // Content
-          Column(
-            children: [
-              const SizedBox(height: 60),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.shield, color: AuthColors.gradientEnd, size: 40),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "SafeTrek",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Vệ Sĩ Ảo của bạn",
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Form Sheet chứa LoginForm
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(30),
-                    ),
-                  ),
-                  // Gọi Widget Login Form đã tách
-                  child: LoginForm(
-                    isEmailMode: _isEmailMode,
-                    phoneController: _phoneController,
-                    emailController: _emailController,
-                    phoneError: _phoneError,
-                    emailError: _emailError,
-                    isButtonActive: _isButtonActive,
-                    onSubmit: _handleSubmit,
-                    onSwitchMode: _switchToMode,
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                const Icon(Icons.shield, color: Colors.white, size: 80),
+                const Text("SafeTrek",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 30),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(30))),
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : LoginForm(
+                            isEmailMode: _isEmailMode,
+                            phoneController: _phoneController,
+                            emailController: _emailController,
+                            passwordController: _passwordController,
+                            phoneError: _phoneError,
+                            emailError: _emailError,
+                            isButtonActive: _isButtonActive,
+                            onSubmit: _handleLogin,
+                            onSwitchMode: (val) => setState(() {
+                              _isEmailMode = val;
+                              _checkButtonActive();
+                              _phoneError = null;
+                              _emailError = null;
+                            }),
+                          ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
