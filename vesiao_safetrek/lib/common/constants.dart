@@ -22,5 +22,5 @@ const String SAFE_PIN = "1234";
 const String DURESS_PIN = "9119";
 
 class Constants {
-  static const String baseUrl = "https://safetrek-api.onrender.com";
+  static const String baseUrl = "https://laptrinhandroid.onrender.com";
 }
