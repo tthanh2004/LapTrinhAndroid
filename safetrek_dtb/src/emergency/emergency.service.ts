@@ -39,7 +39,6 @@ export class EmergencyService {
     });
 
     // --- LOGIC THÔNG BÁO ---
-    // Kiểm tra xem người được mời (phone) có dùng App không
     const targetUser = await this.prisma.user.findUnique({
       where: { phoneNumber: phone },
     });
@@ -97,7 +96,6 @@ export class EmergencyService {
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
 
-    // Tìm tài khoản của những người bảo vệ
     const usersToNotify = await this.prisma.user.findMany({
       where: { phoneNumber: { in: guardianPhones } },
       select: { userId: true, fcmToken: true, fullName: true },
@@ -107,7 +105,6 @@ export class EmergencyService {
     const body = `${sender.fullName || 'Người thân'} đang gặp nguy hiểm! Nhấn để xem vị trí.`;
     const tokens: string[] = [];
 
-    // Lưu thông báo cho từng người
     for (const u of usersToNotify) {
       await this.prisma.notification.create({
         data: {
@@ -121,7 +118,6 @@ export class EmergencyService {
       if (u.fcmToken) tokens.push(u.fcmToken);
     }
 
-    // Gửi Push hàng loạt
     if (tokens.length > 0) {
       await this._sendPushMulticast(tokens, title, body, {
         latitude: lat.toString(),
@@ -134,7 +130,7 @@ export class EmergencyService {
     return { success: true, notifiedCount: tokens.length };
   }
 
-  // 5. [MỚI] Lấy danh sách thông báo
+  // 5. Lấy danh sách thông báo
   async getUserNotifications(userId: number) {
     return this.prisma.notification.findMany({
       where: { userId },
@@ -142,12 +138,13 @@ export class EmergencyService {
     });
   }
 
-  // --- HELPERS ---
+  // --- HELPERS (ĐÃ SỬA LỖI TYPE 'ANY') ---
+
   private async _sendPushToToken(
     token: string,
     title: string,
     body: string,
-    data: any,
+    data: { [key: string]: string }, // [SỬA] Thay 'any' bằng object string
   ) {
     try {
       await admin.messaging().send({
@@ -165,7 +162,7 @@ export class EmergencyService {
     tokens: string[],
     title: string,
     body: string,
-    data: any,
+    data: { [key: string]: string }, // [SỬA] Thay 'any' bằng object string
   ) {
     try {
       await admin.messaging().sendEachForMulticast({
