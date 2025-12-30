@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // 1. Đăng ký gộp (Thông tin + PIN)
+  // 1. Đăng ký gộp
   @Post('register')
   async register(
     @Body()
@@ -14,14 +14,14 @@ export class AuthController {
       password: string;
       fullName: string;
       email?: string;
-      safePin: string;
-      duressPin: string;
+      safePin: string; // [SỬA] App gửi 'safePin' (1234), không phải hash
+      duressPin: string; // [SỬA] App gửi 'duressPin' (9999)
     },
   ) {
     return this.authService.register(body);
   }
 
-  // 2. Xác thực PIN an toàn (Sau khi login)
+  // 2. Xác thực PIN an toàn
   @Post('verify-safe-pin')
   async verifySafePin(@Body() body: { userId: number; pin: string }) {
     return this.authService.verifySafePin(body.userId, body.pin);

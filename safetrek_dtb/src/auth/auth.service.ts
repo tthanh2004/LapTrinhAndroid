@@ -30,6 +30,7 @@ export class AuthService {
     safePin: string;
     duressPin: string;
   }) {
+    // 1. Validate
     if (
       !body.phoneNumber ||
       !body.password ||
@@ -42,39 +43,52 @@ export class AuthService {
       throw new BadRequestException('Hai mã PIN không được trùng nhau.');
     }
 
+    // 2. Kiểm tra trùng lặp (SĐT và Email)
     const existingUser = await this.prisma.user.findUnique({
       where: { phoneNumber: body.phoneNumber },
     });
     if (existingUser)
       throw new BadRequestException('Số điện thoại đã được đăng ký.');
 
-    // Hash dữ liệu song song
+    if (body.email) {
+      const existingEmail = await this.prisma.user.findUnique({
+        where: { email: body.email },
+      });
+      if (existingEmail)
+        throw new BadRequestException('Email đã được sử dụng.');
+    }
+
+    // 3. Mã hóa dữ liệu (Hash)
     const [passwordHash, safePinHash, duressPinHash] = await Promise.all([
       this.hashData(body.password),
       this.hashData(body.safePin),
       this.hashData(body.duressPin),
     ]);
 
+    // 4. Lưu vào DB (Map đúng với schema.prisma)
     const newUser = await this.prisma.user.create({
       data: {
         phoneNumber: body.phoneNumber,
         fullName: body.fullName,
         email: body.email,
         passwordHash: passwordHash,
-        safePinHash: safePinHash,
-        duressPinHash: duressPinHash,
+        safePinHash: safePinHash, // Lưu vào cột safe_pin_hash
+        duressPinHash: duressPinHash, // Lưu vào cột duress_pin_hash
       },
     });
 
     return { message: 'Đăng ký thành công', userId: newUser.userId };
   }
 
-  // --- LOGIC CHECK PIN ---
+  // --- LOGIC CHECK PIN (Dùng cho màn hình nhập PIN sau login) ---
   async verifySafePin(userId: number, pin: string) {
     const user = await this.prisma.user.findUnique({ where: { userId } });
-    if (!user || !user.safePinHash)
-      throw new UnauthorizedException('Tài khoản lỗi.');
 
+    // Kiểm tra user và xem đã có PIN chưa
+    if (!user || !user.safePinHash)
+      throw new UnauthorizedException('Tài khoản lỗi hoặc chưa thiết lập PIN.');
+
+    // So sánh PIN nhập vào với Hash trong DB
     const isMatch = await this.isDataMatch(pin, user.safePinHash);
     if (!isMatch) throw new UnauthorizedException('Mã PIN không chính xác.');
 
@@ -83,8 +97,11 @@ export class AuthService {
 
   // --- LOGIC LOGIN ---
   async loginWithPassword(identity: string, pass: string) {
+    // Tìm user theo SĐT hoặc Email
     const user = await this.prisma.user.findFirst({
-      where: { OR: [{ phoneNumber: identity }, { email: identity }] },
+      where: {
+        OR: [{ phoneNumber: identity }, { email: identity }],
+      },
     });
 
     if (!user) throw new UnauthorizedException('Tài khoản không tồn tại.');
