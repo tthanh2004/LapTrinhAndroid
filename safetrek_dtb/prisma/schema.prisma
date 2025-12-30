@@ -90,6 +90,21 @@ model Alert {
   @@map("alerts")
 }
 
+model Notification {
+  notificationId Int      @id @default(autoincrement()) @map("notification_id")
+  userId         Int      @map("user_id") // Người nhận thông báo
+  title          String   @db.VarChar(255)
+  body           String   @db.Text
+  type           String   @db.VarChar(50) // 'EMERGENCY', 'GUARDIAN_REQUEST'
+  data           String?  @db.Text        // Lưu JSON dữ liệu phụ (VD: ID chuyến đi, Lat/Lng)
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+  
+  user           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
 enum GuardianStatus {
   PENDING
   ACCEPTED

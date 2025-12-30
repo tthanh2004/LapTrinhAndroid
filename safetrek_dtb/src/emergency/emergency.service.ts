@@ -10,7 +10,7 @@ import * as admin from 'firebase-admin';
 export class EmergencyService {
   constructor(private prisma: PrismaService) {}
 
-  // 1. Lấy danh sách người bảo vệ (Dùng guardianId)
+  // 1. Lấy danh sách người bảo vệ
   async getGuardians(userId: number) {
     return this.prisma.guardian.findMany({
       where: { userId },
@@ -18,23 +18,18 @@ export class EmergencyService {
     });
   }
 
-  // 2. Thêm người bảo vệ mới (Gửi lời mời)
+  // 2. Thêm người bảo vệ & Tạo thông báo mời
   async addGuardian(userId: number, name: string, phone: string) {
     const count = await this.prisma.guardian.count({ where: { userId } });
-    if (count >= 5) {
-      throw new BadRequestException(
-        'Bạn chỉ được phép thêm tối đa 5 người bảo vệ',
-      );
-    }
+    if (count >= 5) throw new BadRequestException('Tối đa 5 người bảo vệ');
 
     const existing = await this.prisma.guardian.findFirst({
       where: { userId, guardianPhone: phone },
     });
-    if (existing) {
-      throw new BadRequestException('Người bảo vệ này đã có trong danh sách');
-    }
+    if (existing) throw new BadRequestException('Đã có trong danh sách');
 
-    return this.prisma.guardian.create({
+    // Tạo record Guardian
+    const newGuardian = await this.prisma.guardian.create({
       data: {
         userId,
         guardianName: name,
@@ -42,110 +37,128 @@ export class EmergencyService {
         status: 'PENDING',
       },
     });
+
+    // --- LOGIC THÔNG BÁO ---
+    // Kiểm tra xem người được mời (phone) có dùng App không
+    const targetUser = await this.prisma.user.findUnique({
+      where: { phoneNumber: phone },
+    });
+
+    if (targetUser) {
+      const requester = await this.prisma.user.findUnique({ where: { userId } });
+      const title = 'Lời mời bảo vệ';
+      const body = `${requester?.fullName || 'Ai đó'} muốn thêm bạn làm người bảo vệ.`;
+
+      // a. Lưu vào DB
+      await this.prisma.notification.create({
+        data: {
+          userId: targetUser.userId,
+          title: title,
+          body: body,
+          type: 'GUARDIAN_REQUEST',
+          data: JSON.stringify({ guardianId: newGuardian.guardianId }),
+        },
+      });
+
+      // b. Gửi Push Notification
+      if (targetUser.fcmToken) {
+        await this._sendPushToToken(targetUser.fcmToken, title, body, {
+          type: 'GUARDIAN_REQUEST',
+        });
+      }
+    }
+
+    return newGuardian;
   }
 
-  // 3. Xóa người bảo vệ (Dùng guardianId)
+  // 3. Xóa người bảo vệ
   async deleteGuardian(id: number) {
     try {
-      return await this.prisma.guardian.delete({
-        where: { guardianId: id },
-      });
+      return await this.prisma.guardian.delete({ where: { guardianId: id } });
     } catch {
-      // Không khai báo biến ở đây nữa, xóa sạch (_error)
-      throw new NotFoundException('Không tìm thấy người bảo vệ để xóa');
+      throw new NotFoundException('Không tìm thấy để xóa');
     }
   }
 
-  // 4. Bắn thông báo khẩn cấp (Panic Alert)
+  // 4. Bắn SOS & Lưu thông báo
   async triggerPanicAlert(userId: number, lat: number, lng: number) {
     const sender = await this.prisma.user.findUnique({ where: { userId } });
-    if (!sender) throw new NotFoundException('Không tìm thấy người dùng');
+    if (!sender) throw new NotFoundException('Không tìm thấy User');
 
     const guardians = await this.prisma.guardian.findMany({
       where: { userId, status: 'ACCEPTED' },
       select: { guardianPhone: true },
     });
 
-    if (guardians.length === 0) {
-      return {
-        success: true,
-        message: 'Chưa có người bảo vệ nào xác nhận kết nối.',
-      };
-    }
+    if (guardians.length === 0) return { success: true, message: 'Chưa có người bảo vệ' };
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
 
+    // Tìm tài khoản của những người bảo vệ
     const usersToNotify = await this.prisma.user.findMany({
-      where: {
-        phoneNumber: { in: guardianPhones },
-        fcmToken: { not: null },
-      },
-      select: { fcmToken: true, fullName: true },
+      where: { phoneNumber: { in: guardianPhones } },
+      select: { userId: true, fcmToken: true, fullName: true },
     });
 
-    const tokens = usersToNotify
-      .map((u) => u.fcmToken)
-      .filter((t): t is string => !!t);
+    const title = '⚠️ CẢNH BÁO KHẨN CẤP!';
+    const body = `${sender.fullName || 'Người thân'} đang gặp nguy hiểm! Nhấn để xem vị trí.`;
+    const tokens: string[] = [];
 
-    if (tokens.length === 0) {
-      return {
-        success: true,
-        message: 'Người thân chưa đăng nhập vào ứng dụng để nhận thông báo',
-      };
+    // Lưu thông báo cho từng người
+    for (const u of usersToNotify) {
+      await this.prisma.notification.create({
+        data: {
+          userId: u.userId,
+          title: title,
+          body: body,
+          type: 'EMERGENCY',
+          data: JSON.stringify({ lat, lng }),
+        },
+      });
+      if (u.fcmToken) tokens.push(u.fcmToken);
     }
 
-    const payloadData: { [key: string]: string } = {
-      latitude: lat.toString(),
-      longitude: lng.toString(),
-      type: 'EMERGENCY_PANIC',
-      senderName: sender.fullName || 'Người dùng SafeTrek',
-      senderPhone: sender.phoneNumber ?? 'Không có SĐT',
-    };
+    // Gửi Push hàng loạt
+    if (tokens.length > 0) {
+      await this._sendPushMulticast(tokens, title, body, {
+        latitude: lat.toString(),
+        longitude: lng.toString(),
+        type: 'EMERGENCY_PANIC',
+        senderPhone: sender.phoneNumber || '',
+      });
+    }
 
-    const message: admin.messaging.MulticastMessage = {
-      tokens: tokens,
-      notification: {
-        title: '⚠️ CẢNH BÁO KHẨN CẤP!',
-        body: `${sender.fullName || 'Một người dùng'} đang gặp nguy hiểm! Nhấn để xem vị trí ngay.`,
-      },
-      data: payloadData,
-      android: {
-        priority: 'high',
-        notification: {
-          sound: 'default',
-          channelId: 'emergency_channel',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-        },
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-            mutableContent: true,
-          },
-        },
-      },
-    };
+    return { success: true, notifiedCount: tokens.length };
+  }
 
+  // 5. [MỚI] Lấy danh sách thông báo
+  async getUserNotifications(userId: number) {
+    return this.prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // --- HELPERS ---
+  private async _sendPushToToken(token: string, title: string, body: string, data: any) {
     try {
-      const response = await admin.messaging().sendEachForMulticast(message);
-      console.log(
-        `✅ SOS signal sent. Success: ${response.successCount}, Failure: ${response.failureCount}`,
-      );
+      await admin.messaging().send({
+        token,
+        notification: { title, body },
+        data: data,
+        android: { priority: 'high' },
+      });
+    } catch (e) { console.log('FCM Error', e); }
+  }
 
-      return {
-        success: true,
-        notifiedCount: response.successCount,
-        failedCount: response.failureCount,
-      };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Lỗi Firebase Cloud Messaging:', errorMessage);
-      throw new BadRequestException(
-        'Hệ thống thông báo gặp lỗi, vui lòng thử lại',
-      );
-    }
+  private async _sendPushMulticast(tokens: string[], title: string, body: string, data: any) {
+    try {
+      await admin.messaging().sendEachForMulticast({
+        tokens,
+        notification: { title, body },
+        data: data,
+        android: { priority: 'high' },
+      });
+    } catch (e) { console.log('FCM Multicast Error', e); }
   }
 }
