@@ -29,26 +29,51 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
   void _handleVerify() async {
     String pin = _controllers.map((e) => e.text).join();
     if (pin.length < 4) return;
+    
     setState(() => _isLoading = true);
+
+    print("--> Đang gửi: UserID=${widget.userId}, PIN=$pin"); // [DEBUG] Xem gửi gì đi
 
     try {
       final response = await http.post(
         Uri.parse('${Constants.baseUrl}/auth/verify-safe-pin'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'userId': widget.userId, 'pin': pin}),
+        body: jsonEncode({
+          'userId': widget.userId, 
+          'pin': pin
+        }),
       );
 
-      if (response.statusCode == 200) {
-        if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => MobileScreen(userId: widget.userId)));
+      print("<-- Server trả về: ${response.statusCode} - ${response.body}"); // [DEBUG] Xem Server báo lỗi gì
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (mounted) {
+           Navigator.of(context).pushReplacement(
+             MaterialPageRoute(builder: (context) => MobileScreen(userId: widget.userId))
+           );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Mã PIN không đúng"), backgroundColor: Colors.red));
-        for(var c in _controllers) c.clear(); _focusNodes[0].requestFocus();
+        // Hiển thị thông báo lỗi cụ thể từ Server
+        final errorData = jsonDecode(response.body);
+        String message = errorData['message'] ?? "Mã PIN không đúng";
+        
+        _showError(message);
+        _clearPin();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Lỗi: $e"), backgroundColor: Colors.red));
+      _showError("Lỗi kết nối: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError(String msg) {
+    if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+  }
+
+  void _clearPin() {
+    for(var c in _controllers) c.clear(); 
+    _focusNodes[0].requestFocus();
   }
 
   @override
