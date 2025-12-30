@@ -1,133 +1,89 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:vesiao_safetrek/common/constants.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/utils/auth_colors.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/widgets/login_form.dart';
-import 'package:vesiao_safetrek/screens/mobile/mobile_screen.dart';
-import 'package:vesiao_safetrek/common/constants.dart';
+import 'package:vesiao_safetrek/screens/mobile/auth/verify_pin_screen.dart'; // Màn xác thực PIN
+import 'package:vesiao_safetrek/screens/mobile/auth/register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // [SỬA Ở ĐÂY] Đổi thành true để mặc định là Email
-  bool _isEmailMode = true; 
   bool _isLoading = false;
+  bool _isEmailMode = false;
 
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _identityController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
-  String? _phoneError;
-  String? _emailError;
+  String? _identityError;
   bool _isButtonActive = false;
 
   @override
   void initState() {
     super.initState();
-    _phoneController.addListener(_checkButtonActive);
-    _emailController.addListener(_checkButtonActive);
+    _identityController.addListener(_checkButtonActive);
     _passwordController.addListener(_checkButtonActive);
   }
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _emailController.dispose();
+    _identityController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   void _checkButtonActive() {
     setState(() {
-      bool isIdentityValid = _isEmailMode
-          ? _emailController.text.isNotEmpty
-          : _phoneController.text.length >= 9;
-      
-      bool isPasswordValid = _passwordController.text.length >= 6;
-      
-      _isButtonActive = isIdentityValid && isPasswordValid;
+      bool isIdentityValid = _isEmailMode 
+        ? _identityController.text.contains('@') 
+        : _identityController.text.length >= 9;
+      _isButtonActive = isIdentityValid && _passwordController.text.length >= 6;
     });
-  }
-
-  bool _validateInputs() {
-    setState(() {
-      _phoneError = null;
-      _emailError = null;
-    });
-
-    if (_isEmailMode) {
-      final email = _emailController.text.trim();
-      if (!RegExp(r'^[a-zA-Z0-9._%+-]+@gmail\.com$').hasMatch(email)) {
-        setState(() => _emailError = "Vui lòng nhập đúng định dạng Gmail");
-        return false;
-      }
-    } else {
-      final phone = _phoneController.text.trim();
-      if (!RegExp(r'^(0?)(3|5|7|8|9)([0-9]{8})$').hasMatch(phone)) {
-        setState(() => _phoneError = "SĐT không hợp lệ");
-        return false;
-      }
-    }
-    return true;
   }
 
   void _handleLogin() async {
-    if (!_validateInputs()) return;
-
-    setState(() => _isLoading = true);
-
-    String identity = _isEmailMode 
-        ? _emailController.text.trim() 
-        : _phoneController.text.trim();
-    
-    if (!_isEmailMode && identity.startsWith("0")) {
-       identity = "+84${identity.substring(1)}";
-    }
-
-    final String password = _passwordController.text;
+    setState(() {
+      _isLoading = true;
+      _identityError = null;
+    });
 
     try {
       final response = await http.post(
-        Uri.parse('${Constants.baseUrl}/auth/login-password'),
+        Uri.parse('${Constants.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'identity': identity,
-          'password': password,
+          'identity': _identityController.text.trim(),
+          'password': _passwordController.text,
         }),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        int userId = data['user']['userId'];
-        _onLoginSuccess(userId);
+        // ĐĂNG NHẬP THÀNH CÔNG -> CHUYỂN QUA NHẬP PIN
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => VerifyPinScreen(
+              userId: data['user']['userId'],
+              userName: data['user']['fullName'] ?? "User",
+            ),
+          ),
+        );
       } else {
-        final errorData = jsonDecode(response.body);
-        _showError(errorData['message'] ?? "Đăng nhập thất bại");
+        _showError(jsonDecode(response.body)['message'] ?? "Đăng nhập thất bại");
       }
     } catch (e) {
-      _showError("Lỗi kết nối máy chủ: $e");
+      _showError("Lỗi kết nối: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showError(String msg) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  void _onLoginSuccess(int userId) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => MobileScreen(userId: userId)),
-    );
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   @override
@@ -138,9 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
                 colors: [AuthColors.gradientStart, AuthColors.gradientEnd],
+                begin: Alignment.topLeft, end: Alignment.bottomRight
               ),
             ),
           ),
@@ -149,37 +104,28 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 40),
                 const Icon(Icons.shield, color: Colors.white, size: 80),
-                const Text("SafeTrek",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold)),
+                const Text("SafeTrek", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 30),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(30))),
+                    decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
                     child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : LoginForm(
-                            isEmailMode: _isEmailMode,
-                            phoneController: _phoneController,
-                            emailController: _emailController,
-                            passwordController: _passwordController,
-                            phoneError: _phoneError,
-                            emailError: _emailError,
-                            isButtonActive: _isButtonActive,
-                            onSubmit: _handleLogin,
-                            onSwitchMode: (val) => setState(() {
-                              _isEmailMode = val;
-                              _checkButtonActive();
-                              _phoneError = null;
-                              _emailError = null;
-                            }),
-                          ),
+                      ? const Center(child: CircularProgressIndicator())
+                      : LoginForm(
+                          isEmailMode: _isEmailMode,
+                          identityController: _identityController,
+                          passwordController: _passwordController,
+                          identityError: _identityError,
+                          isButtonActive: _isButtonActive,
+                          onSubmit: _handleLogin,
+                          onRegisterTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
+                          onSwitchMode: (val) => setState(() {
+                            _isEmailMode = val;
+                            _identityController.clear();
+                            _checkButtonActive();
+                          }),
+                        ),
                   ),
                 ),
               ],
