@@ -19,8 +19,14 @@ export class EmergencyController {
   }
 
   @Post('guardians')
-  async addGuardian(@Body() body: { userId: number; name: string; phone: string }) {
-    return this.emergencyService.addGuardian(body.userId, body.name, body.phone);
+  async addGuardian(
+    @Body() body: { userId: number; name: string; phone: string },
+  ) {
+    return this.emergencyService.addGuardian(
+      body.userId,
+      body.name,
+      body.phone,
+    );
   }
 
   @Delete('guardians/:id')
@@ -29,8 +35,14 @@ export class EmergencyController {
   }
 
   @Post('panic')
-  async triggerPanic(@Body() body: { userId: number; lat: number; lng: number }) {
-    return this.emergencyService.triggerPanicAlert(body.userId, body.lat, body.lng);
+  async triggerPanic(
+    @Body() body: { userId: number; lat: number; lng: number },
+  ) {
+    return this.emergencyService.triggerPanicAlert(
+      body.userId,
+      body.lat,
+      body.lng,
+    );
   }
 
   // [MỚI] API lấy danh sách thông báo

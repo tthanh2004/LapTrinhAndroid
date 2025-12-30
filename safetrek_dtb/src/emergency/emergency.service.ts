@@ -45,7 +45,9 @@ export class EmergencyService {
     });
 
     if (targetUser) {
-      const requester = await this.prisma.user.findUnique({ where: { userId } });
+      const requester = await this.prisma.user.findUnique({
+        where: { userId },
+      });
       const title = 'Lời mời bảo vệ';
       const body = `${requester?.fullName || 'Ai đó'} muốn thêm bạn làm người bảo vệ.`;
 
@@ -90,7 +92,8 @@ export class EmergencyService {
       select: { guardianPhone: true },
     });
 
-    if (guardians.length === 0) return { success: true, message: 'Chưa có người bảo vệ' };
+    if (guardians.length === 0)
+      return { success: true, message: 'Chưa có người bảo vệ' };
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
 
@@ -140,7 +143,12 @@ export class EmergencyService {
   }
 
   // --- HELPERS ---
-  private async _sendPushToToken(token: string, title: string, body: string, data: any) {
+  private async _sendPushToToken(
+    token: string,
+    title: string,
+    body: string,
+    data: any,
+  ) {
     try {
       await admin.messaging().send({
         token,
@@ -148,10 +156,17 @@ export class EmergencyService {
         data: data,
         android: { priority: 'high' },
       });
-    } catch (e) { console.log('FCM Error', e); }
+    } catch (e) {
+      console.log('FCM Error', e);
+    }
   }
 
-  private async _sendPushMulticast(tokens: string[], title: string, body: string, data: any) {
+  private async _sendPushMulticast(
+    tokens: string[],
+    title: string,
+    body: string,
+    data: any,
+  ) {
     try {
       await admin.messaging().sendEachForMulticast({
         tokens,
@@ -159,6 +174,8 @@ export class EmergencyService {
         data: data,
         android: { priority: 'high' },
       });
-    } catch (e) { console.log('FCM Multicast Error', e); }
+    } catch (e) {
+      console.log('FCM Multicast Error', e);
+    }
   }
 }
