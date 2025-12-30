@@ -34,9 +34,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'fullName': _fullNameController.text.trim(),
           'phoneNumber': _phoneController.text.trim(),
           'email': _emailController.text.trim(),
-          'password': _passwordController.text,
-          'safePin': _safePinController.text,
-          'duressPin': _duressPinController.text,
+          
+          // 👇 PHẢI SỬA KEY NÀY THÀNH 'passwordHash'
+          'passwordHash': _passwordController.text, 
+          
+          // 👇 Key này giữ nguyên (đã đúng)
+          'safePinHash': _safePinController.text,     
+          'duressPinHash': _duressPinController.text, 
         }),
       );
 
