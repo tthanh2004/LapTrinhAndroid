@@ -43,8 +43,8 @@ class _MobileScreenState extends State<MobileScreen> {
       // Tab 2: Danh bạ
       ContactsTab(userId: widget.userId),
       
-      // Tab 3: Cài đặt
-      const SettingsTab(),
+      // Tab 3: Cài đặt (ĐÃ SỬA: Truyền userId vào đây)
+      SettingsTab(userId: widget.userId), 
     ];
 
     return Scaffold(

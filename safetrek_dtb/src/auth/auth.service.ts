@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException, // [MỚI]
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
@@ -43,8 +44,6 @@ export class AuthService {
       throw new BadRequestException('Hai mã PIN không được trùng nhau.');
     }
 
-    // --- [SỬA LỖI EMAIL RỖNG] ---
-    // Nếu email là chuỗi rỗng "", gán nó thành undefined để Prisma lưu là NULL
     const validEmail =
       body.email && body.email.trim() !== '' ? body.email.trim() : undefined;
 
@@ -55,7 +54,7 @@ export class AuthService {
     if (existingUser)
       throw new BadRequestException('Số điện thoại đã được đăng ký.');
 
-    // 3. Kiểm tra trùng lặp Email (Chỉ kiểm tra nếu có email hợp lệ)
+    // 3. Kiểm tra trùng lặp Email
     if (validEmail) {
       const existingEmail = await this.prisma.user.findUnique({
         where: { email: validEmail },
@@ -77,7 +76,7 @@ export class AuthService {
       data: {
         phoneNumber: body.phoneNumber,
         fullName: body.fullName,
-        email: validEmail, // [QUAN TRỌNG] Lưu biến đã xử lý (undefined nếu rỗng)
+        email: validEmail,
         passwordHash: finalPasswordHash,
         safePinHash: finalSafePinHash,
         duressPinHash: finalDuressPinHash,
@@ -87,7 +86,6 @@ export class AuthService {
     return { message: 'Đăng ký thành công', userId: newUser.userId };
   }
 
-  // ... Các hàm khác giữ nguyên
   async verifySafePin(userId: number, pin: string) {
     const user = await this.prisma.user.findUnique({ where: { userId } });
     if (!user || !user.safePinHash)
@@ -116,5 +114,29 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
       },
     };
+  }
+
+  // [MỚI] Lấy thông tin User Profile
+  async getUserProfile(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { userId },
+      select: {
+        userId: true,
+        fullName: true,
+        phoneNumber: true,
+        email: true,
+        avatarUrl: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  // [MỚI] Cập nhật FCM Token
+  async updateFcmToken(userId: number, token: string) {
+    return this.prisma.user.update({
+      where: { userId },
+      data: { fcmToken: token },
+    });
   }
 }

@@ -43,6 +43,8 @@ dependencies:
   intl: ^0.20.2
   url_launcher: ^6.2.5
   firebase_messaging: ^16.1.0
+  permission_handler: ^11.3.0  # Xin quyền
+  shared_preferences: ^2.2.2   # Lưu userId
 
 dev_dependencies:
   flutter_test:

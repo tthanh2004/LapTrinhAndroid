@@ -1,23 +1,82 @@
 import 'package:flutter/material.dart';
-import '../../../common/constants.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../../../../common/constants.dart';
+import '../../../../services/user_service.dart'; // Import service
 import '../auth/login_screen.dart';
-// Import các màn hình cần điều hướng đến
 import './profile/personal_info_screen.dart';
 import './security/verify_pin_screen.dart';
 
 class SettingsTab extends StatefulWidget {
-  const SettingsTab({super.key});
+  final int userId; 
+  const SettingsTab({super.key, required this.userId});
 
   @override
   State<SettingsTab> createState() => _SettingsTabState();
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  bool _gpsTracking = true;
-  bool _backgroundMode = true;
-  bool _notifications = true;
+  // Trạng thái các switch quyền
+  bool _gpsTracking = false;
+  bool _backgroundMode = false;
+  bool _notifications = false;
 
-  // Xử lý đăng xuất
+  // Dữ liệu User từ API
+  Map<String, dynamic>? _userProfile;
+  bool _isLoadingProfile = true;
+  final UserService _userService = UserService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _checkPermissionsStatus();
+  }
+
+  // 1. Load thông tin User từ Server
+  Future<void> _loadUserData() async {
+    final profile = await _userService.getUserProfile(widget.userId);
+    if (mounted) {
+      setState(() {
+        _userProfile = profile;
+        _isLoadingProfile = false;
+      });
+    }
+  }
+
+  // 2. Kiểm tra quyền hiện tại của thiết bị
+  Future<void> _checkPermissionsStatus() async {
+    final gps = await Permission.location.isGranted;
+    final bgGps = await Permission.locationAlways.isGranted;
+    final notif = await Permission.notification.isGranted;
+
+    if (mounted) {
+      setState(() {
+        _gpsTracking = gps;
+        _backgroundMode = bgGps;
+        _notifications = notif;
+      });
+    }
+  }
+
+  // 3. Hàm bật/tắt quyền
+  Future<void> _togglePermission(Permission permission) async {
+    if (!(await permission.isGranted)) {
+      final status = await permission.request();
+      if (status.isPermanentlyDenied) {
+        openAppSettings(); 
+      } else if (status.isGranted && permission == Permission.notification) {
+        String? token = await FirebaseMessaging.instance.getToken();
+        if (token != null) {
+          _userService.updateFcmToken(widget.userId, token);
+        }
+      }
+    } else {
+      openAppSettings();
+    }
+    await _checkPermissionsStatus();
+  }
+
   void _handleLogout() {
     showDialog(
       context: context,
@@ -28,11 +87,10 @@ class _SettingsTabState extends State<SettingsTab> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Hủy", style: TextStyle(color: Colors.grey))),
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Đóng Dialog
-              // Quay về màn Login và xóa lịch sử
+              Navigator.pop(context);
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const LoginScreen()), 
-                (route) => false
+                (route) => false,
               );
             },
             child: const Text("Đăng xuất", style: TextStyle(color: kDangerColor)),
@@ -57,15 +115,53 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.settings, color: Colors.white, size: 32),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Cài đặt", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                    Text("Tùy chỉnh ứng dụng", style: TextStyle(color: Colors.blue[100], fontSize: 14)),
-                  ],
+                CircleAvatar(
+                  radius: 32,
+                  backgroundColor: Colors.white,
+                  backgroundImage: _userProfile?['avatarUrl'] != null 
+                      ? NetworkImage(_userProfile!['avatarUrl']) 
+                      : null,
+                  child: _userProfile?['avatarUrl'] == null
+                      ? Text(
+                          _userProfile != null && _userProfile!['fullName'] != null 
+                              ? _userProfile!['fullName'][0].toUpperCase() 
+                              : "?",
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kPrimaryColor),
+                        )
+                      : null,
                 ),
+                const SizedBox(width: 16),
+                
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _isLoadingProfile 
+                          ? const SizedBox(width: 100, height: 20, child: LinearProgressIndicator(color: Colors.white30))
+                          : Text(
+                              _userProfile?['fullName'] ?? "Người dùng",
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _userProfile?['phoneNumber'] ?? "Đang tải...",
+                        style: TextStyle(color: Colors.blue[100], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white70),
+                  onPressed: () {
+                    // [ĐÃ SỬA] Truyền userId và reload data khi quay lại
+                    Navigator.push(
+                      context, 
+                      MaterialPageRoute(builder: (context) => PersonalInfoScreen(userId: widget.userId))
+                    ).then((_) => _loadUserData());
+                  },
+                )
               ],
             ),
           ),
@@ -75,7 +171,6 @@ class _SettingsTabState extends State<SettingsTab> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                // === SECTION 1: THÔNG TIN CÁ NHÂN ===
                 _buildSectionTitle("Thông tin cá nhân"),
                 Container(
                   decoration: _boxDecoration(),
@@ -86,15 +181,17 @@ class _SettingsTabState extends State<SettingsTab> {
                     title: "Cập nhật thông tin",
                     subtitle: "Thay đổi tên, email & ảnh đại diện",
                     showArrow: true,
-                    // Điều hướng sang màn hình Profile
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const PersonalInfoScreen()));
+                      // [ĐÃ SỬA] Truyền userId và reload data khi quay lại
+                      Navigator.push(
+                        context, 
+                        MaterialPageRoute(builder: (context) => PersonalInfoScreen(userId: widget.userId))
+                      ).then((_) => _loadUserData());
                     },
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // === SECTION 2: BẢO MẬT ===
                 _buildSectionTitle("Bảo mật"),
                 Container(
                   decoration: _boxDecoration(),
@@ -105,7 +202,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     title: "Mã PIN",
                     subtitle: "Đổi PIN an toàn & PIN khẩn cấp",
                     showArrow: true,
-                    // Điều hướng sang màn hình Verify PIN
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const VerifyPinScreen()));
                     },
@@ -113,23 +209,36 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
                 const SizedBox(height: 24),
 
-                // === SECTION 3: QUYỀN TRUY CẬP ===
                 _buildSectionTitle("Quyền truy cập"),
                 Container(
                   decoration: _boxDecoration(),
                   child: Column(
                     children: [
-                      _buildSwitchTile(icon: Icons.location_on, iconColor: Colors.green, bgColor: Colors.green[50]!, title: "Theo dõi GPS", subtitle: "Luôn bật để gửi vị trí chính xác", value: _gpsTracking, onChanged: (v) => setState(() => _gpsTracking = v)),
+                      _buildSwitchTile(
+                        icon: Icons.location_on, iconColor: Colors.green, bgColor: Colors.green[50]!,
+                        title: "Theo dõi GPS", subtitle: "Luôn bật để gửi vị trí chính xác",
+                        value: _gpsTracking,
+                        onChanged: (v) => _togglePermission(Permission.location),
+                      ),
                       const Divider(height: 1, indent: 60),
-                      _buildSwitchTile(icon: Icons.smartphone, iconColor: Colors.purple, bgColor: Colors.purple[50]!, title: "Chạy nền", subtitle: "Ứng dụng hoạt động khi tắt màn hình", value: _backgroundMode, onChanged: (v) => setState(() => _backgroundMode = v)),
+                      _buildSwitchTile(
+                        icon: Icons.smartphone, iconColor: Colors.purple, bgColor: Colors.purple[50]!,
+                        title: "Chạy nền", subtitle: "Cho phép theo dõi khi tắt màn hình",
+                        value: _backgroundMode,
+                        onChanged: (v) => _togglePermission(Permission.locationAlways),
+                      ),
                       const Divider(height: 1, indent: 60),
-                      _buildSwitchTile(icon: Icons.notifications, iconColor: Colors.orange, bgColor: Colors.orange[50]!, title: "Thông báo", subtitle: "Nhận cảnh báo và nhắc nhở", value: _notifications, onChanged: (v) => setState(() => _notifications = v)),
+                      _buildSwitchTile(
+                        icon: Icons.notifications, iconColor: Colors.orange, bgColor: Colors.orange[50]!,
+                        title: "Thông báo", subtitle: "Nhận cảnh báo khẩn cấp",
+                        value: _notifications,
+                        onChanged: (v) => _togglePermission(Permission.notification),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // === SECTION 4: TÀI KHOẢN ===
                 _buildSectionTitle("Tài khoản"),
                 Container(
                   decoration: _boxDecoration(),
@@ -139,20 +248,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: Colors.red[50], shape: BoxShape.circle), child: const Icon(Icons.logout, color: kDangerColor, size: 20)),
                     title: const Text("Đăng xuất", style: TextStyle(fontWeight: FontWeight.bold, color: kDangerColor)),
                     subtitle: const Text("Thoát khỏi tài khoản", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                // Cảnh báo quan trọng
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.shade200)),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber, color: Colors.orange[800], size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text("SafeTrek không thay thế các dịch vụ khẩn cấp (113, 114, 115).", style: TextStyle(color: Colors.orange[800], fontSize: 13))),
-                    ],
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -166,7 +261,6 @@ class _SettingsTabState extends State<SettingsTab> {
 
   // --- HELPER WIDGETS ---
   BoxDecoration _boxDecoration() => BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]);
-
   Widget _buildSectionTitle(String title) => Padding(padding: const EdgeInsets.only(bottom: 12, left: 4), child: Text(title.toUpperCase(), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.0)));
 
   Widget _buildTile({required IconData icon, required Color iconColor, required Color bgColor, required String title, required String subtitle, required VoidCallback onTap, bool showArrow = false}) {
@@ -186,7 +280,7 @@ class _SettingsTabState extends State<SettingsTab> {
       leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle), child: Icon(icon, color: iconColor, size: 20)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-      trailing: Switch(value: value, onChanged: onChanged, activeThumbColor: iconColor),
+      trailing: Switch(value: value, onChanged: onChanged, activeThumbColor: iconColor, activeColor: iconColor),
     );
   }
 }
