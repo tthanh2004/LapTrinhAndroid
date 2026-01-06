@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { EmergencyService } from './emergency.service';
+import { GuardianStatus } from '@prisma/client';
 
 @Controller('emergency')
 export class EmergencyController {
@@ -34,6 +35,21 @@ export class EmergencyController {
     return this.emergencyService.deleteGuardian(id);
   }
 
+  // [MỚI] API Phản hồi (Chấp nhận/Từ chối)
+  @Post('guardians/respond')
+  async respondToRequest(
+    @Body() body: { guardianId: number; status: 'ACCEPTED' | 'REJECTED' },
+  ) {
+    const statusEnum =
+      body.status === 'ACCEPTED'
+        ? GuardianStatus.ACCEPTED
+        : GuardianStatus.REJECTED;
+    return this.emergencyService.respondToGuardianRequest(
+      body.guardianId,
+      statusEnum,
+    );
+  }
+
   @Post('panic')
   async triggerPanic(
     @Body() body: { userId: number; lat: number; lng: number },
@@ -45,7 +61,6 @@ export class EmergencyController {
     );
   }
 
-  // [MỚI] API lấy danh sách thông báo
   @Get('notifications/:userId')
   async getNotifications(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getUserNotifications(userId);

@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../../../common/constants.dart';
-// Nếu chưa có intl, bạn có thể xóa import này và dùng hàm format đơn giản bên dưới
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
 
 class NotificationScreen extends StatefulWidget {
   final int userId;
@@ -42,11 +41,44 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  // --- Xử lý Chấp nhận / Từ chối ---
+  Future<void> _handleGuardianResponse(int index, int guardianId, bool isAccepted) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}/emergency/guardians/respond'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'guardianId': guardianId,
+          'status': isAccepted ? 'ACCEPTED' : 'REJECTED'
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isAccepted ? "Đã chấp nhận lời mời" : "Đã từ chối lời mời"),
+            backgroundColor: isAccepted ? Colors.green : Colors.grey,
+          ),
+        );
+
+        // Xóa thông báo khỏi list sau khi xử lý xong
+        setState(() {
+          _notifications.removeAt(index);
+        });
+      } else {
+        debugPrint("Lỗi server: ${response.body}");
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Có lỗi xảy ra"), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+      debugPrint("Lỗi kết nối: $e");
+    }
+  }
+
   String _formatDate(String? dateStr) {
     if (dateStr == null) return "";
     try {
       final date = DateTime.parse(dateStr).toLocal();
-      // Nếu không dùng intl, hãy return date.toString();
       return DateFormat('dd/MM/yyyy HH:mm').format(date);
     } catch (e) {
       return dateStr;
@@ -84,7 +116,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   itemBuilder: (context, index) {
                     final notif = _notifications[index];
                     final isEmergency = notif['type'] == 'EMERGENCY';
+                    final isRequest = notif['type'] == 'GUARDIAN_REQUEST';
                     
+                    // Lấy guardianId từ chuỗi JSON
+                    int? guardianId;
+                    if (isRequest && notif['data'] != null) {
+                      try {
+                        final dataObj = jsonDecode(notif['data']);
+                        guardianId = dataObj['guardianId'];
+                      } catch (e) {
+                        debugPrint("Lỗi parse data: $e");
+                      }
+                    }
+
                     return Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -96,40 +140,77 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           color: isEmergency ? Colors.red.withOpacity(0.2) : Colors.transparent,
                         ),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: CircleAvatar(
-                          radius: 24,
-                          backgroundColor: isEmergency ? Colors.red[50] : Colors.blue[50],
-                          child: Icon(
-                            isEmergency ? Icons.warning_amber_rounded : Icons.person_add_alt_1,
-                            color: isEmergency ? Colors.red : Colors.blue,
-                            size: 28,
-                          ),
-                        ),
-                        title: Text(
-                          notif['title'] ?? "Thông báo",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isEmergency ? Colors.red[700] : Colors.black87,
-                            fontSize: 16,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 6),
-                            Text(
-                              notif['body'] ?? "",
-                              style: const TextStyle(color: Colors.black54, height: 1.3),
+                      child: Column(
+                        children: [
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            leading: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: isEmergency ? Colors.red[50] : Colors.blue[50],
+                              child: Icon(
+                                isEmergency ? Icons.warning_amber_rounded : Icons.person_add_alt_1,
+                                color: isEmergency ? Colors.red : Colors.blue,
+                                size: 28,
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _formatDate(notif['createdAt']),
-                              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                            title: Text(
+                              notif['title'] ?? "Thông báo",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isEmergency ? Colors.red[700] : Colors.black87,
+                                fontSize: 16,
+                              ),
                             ),
-                          ],
-                        ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 6),
+                                Text(
+                                  notif['body'] ?? "",
+                                  style: const TextStyle(color: Colors.black54, height: 1.3),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _formatDate(notif['createdAt']),
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // --- HIỂN THỊ 2 NÚT NẾU LÀ REQUEST ---
+                          if (isRequest && guardianId != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => _handleGuardianResponse(index, guardianId!, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: const Text("Chấp nhận"),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () => _handleGuardianResponse(index, guardianId!, false),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.grey[700],
+                                        side: BorderSide(color: Colors.grey[300]!),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: const Text("Từ chối"),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   },

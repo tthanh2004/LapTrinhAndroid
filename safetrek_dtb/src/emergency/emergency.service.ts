@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as admin from 'firebase-admin';
+import { GuardianStatus } from '@prisma/client'; // Import Enum
 
 @Injectable()
 export class EmergencyService {
@@ -28,7 +29,7 @@ export class EmergencyService {
     });
     if (existing) throw new BadRequestException('Đã có trong danh sách');
 
-    // Tạo record Guardian
+    // Tạo record Guardian (PENDING)
     const newGuardian = await this.prisma.guardian.create({
       data: {
         userId,
@@ -81,7 +82,23 @@ export class EmergencyService {
     }
   }
 
-  // 4. Bắn SOS & Lưu thông báo
+  // 4. [MỚI] Xử lý phản hồi lời mời (Chấp nhận / Từ chối)
+  async respondToGuardianRequest(guardianId: number, status: GuardianStatus) {
+    const guardian = await this.prisma.guardian.findUnique({
+      where: { guardianId },
+    });
+
+    if (!guardian) {
+      throw new NotFoundException('Lời mời không tồn tại hoặc đã bị hủy');
+    }
+
+    return this.prisma.guardian.update({
+      where: { guardianId },
+      data: { status: status },
+    });
+  }
+
+  // 5. Bắn SOS & Lưu thông báo
   async triggerPanicAlert(userId: number, lat: number, lng: number) {
     const sender = await this.prisma.user.findUnique({ where: { userId } });
     if (!sender) throw new NotFoundException('Không tìm thấy User');
@@ -130,7 +147,7 @@ export class EmergencyService {
     return { success: true, notifiedCount: tokens.length };
   }
 
-  // 5. Lấy danh sách thông báo
+  // 6. Lấy danh sách thông báo
   async getUserNotifications(userId: number) {
     return this.prisma.notification.findMany({
       where: { userId },
@@ -138,13 +155,12 @@ export class EmergencyService {
     });
   }
 
-  // --- HELPERS (ĐÃ SỬA LỖI TYPE 'ANY') ---
-
+  // --- HELPERS ---
   private async _sendPushToToken(
     token: string,
     title: string,
     body: string,
-    data: { [key: string]: string }, // [SỬA] Thay 'any' bằng object string
+    data: { [key: string]: string },
   ) {
     try {
       await admin.messaging().send({
@@ -162,7 +178,7 @@ export class EmergencyService {
     tokens: string[],
     title: string,
     body: string,
-    data: { [key: string]: string }, // [SỬA] Thay 'any' bằng object string
+    data: { [key: string]: string },
   ) {
     try {
       await admin.messaging().sendEachForMulticast({
