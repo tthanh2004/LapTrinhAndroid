@@ -20,6 +20,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     _loadData();
   }
 
+  // Load từ API thật
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final data = await _guardianService.fetchPeopleIProtect(widget.userId);
@@ -31,16 +32,17 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     }
   }
 
+  // Xử lý Chấp nhận/Từ chối
   Future<void> _handleResponse(int guardianId, bool accept) async {
     bool success = await _guardianService.respondToRequest(guardianId, accept);
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(accept ? "Đã chấp nhận bảo vệ" : "Đã từ chối"), backgroundColor: accept ? Colors.green : Colors.grey),
       );
-      _loadData(); // Tải lại danh sách
+      _loadData(); // Load lại danh sách sau khi thao tác
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Có lỗi xảy ra"), backgroundColor: Colors.red),
+        const SnackBar(content: Text("Có lỗi xảy ra, vui lòng thử lại"), backgroundColor: Colors.red),
       );
     }
   }
@@ -50,7 +52,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Người được bảo vệ", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("Người bạn bảo vệ", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF2563EB),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -84,7 +86,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
         children: [
           Icon(Icons.shield_outlined, size: 60, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          Text("Bạn chưa bảo vệ ai cả", style: TextStyle(color: Colors.grey[500])),
+          Text("Chưa có ai thêm bạn làm người bảo vệ", style: TextStyle(color: Colors.grey[500])),
         ],
       ),
     );
@@ -94,13 +96,13 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      color: const Color(0xFFEFF6FF), // Blue 50
+      color: const Color(0xFFEFF6FF),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
           Text("Danh sách này là gì?", style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold)),
           SizedBox(height: 4),
-          Text("Đây là những người đã thêm bạn làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.", style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4)),
+          Text("Đây là những người đã thêm BẠN làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.", style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4)),
         ],
       ),
     );
@@ -159,16 +161,14 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
             // Nếu chưa chấp nhận (PENDING) -> Hiển thị nút Chấp nhận / Từ chối
             if (!isAccepted) ...[
               const SizedBox(height: 16),
-              const Divider(height: 1),
+              const Divider(height: 1, color: Colors.grey),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _handleResponse(guardianId, false),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey, side: BorderSide(color: Colors.grey.shade300),
-                      ),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.grey, side: BorderSide(color: Colors.grey.shade300)),
                       child: const Text("Từ chối"),
                     ),
                   ),
@@ -176,9 +176,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _handleResponse(guardianId, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white,
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
                       child: const Text("Chấp nhận"),
                     ),
                   ),

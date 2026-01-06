@@ -55,17 +55,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (!mounted) return;
+        
+        // Cập nhật trạng thái hiển thị trực tiếp trên UI
+        setState(() {
+          // Thêm field 'handledStatus' vào item để đánh dấu đã xử lý
+          _notifications[index]['handledStatus'] = isAccepted ? 'ACCEPTED' : 'REJECTED';
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isAccepted ? "Đã chấp nhận lời mời" : "Đã từ chối lời mời"),
             backgroundColor: isAccepted ? Colors.green : Colors.grey,
           ),
         );
-
-        // Xóa thông báo khỏi list sau khi xử lý xong
-        setState(() {
-          _notifications.removeAt(index);
-        });
       } else {
         debugPrint("Lỗi server: ${response.body}");
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Có lỗi xảy ra"), backgroundColor: Colors.red));
@@ -118,7 +120,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     final isEmergency = notif['type'] == 'EMERGENCY';
                     final isRequest = notif['type'] == 'GUARDIAN_REQUEST';
                     
-                    // Lấy guardianId từ chuỗi JSON
+                    // Kiểm tra xem đã xử lý chưa (từ biến local hoặc logic khác nếu có)
+                    // Lưu ý: Nếu load lại app, trạng thái này sẽ mất trừ khi Backend lưu vào DB.
+                    // Để đơn giản hiện tại ta dùng biến tạm trên RAM.
+                    final handledStatus = notif['handledStatus']; 
+
                     int? guardianId;
                     if (isRequest && notif['data'] != null) {
                       try {
@@ -178,37 +184,67 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             ),
                           ),
                           
-                          // --- HIỂN THỊ 2 NÚT NẾU LÀ REQUEST ---
+                          // --- LOGIC HIỂN THỊ NÚT HOẶC TRẠNG THÁI ---
                           if (isRequest && guardianId != null)
                             Padding(
                               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () => _handleGuardianResponse(index, guardianId!, true),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue,
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              child: handledStatus != null
+                                  ? Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        color: handledStatus == 'ACCEPTED' ? Colors.green[50] : Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: handledStatus == 'ACCEPTED' ? Colors.green[200]! : Colors.grey[300]!
+                                        ),
                                       ),
-                                      child: const Text("Chấp nhận"),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () => _handleGuardianResponse(index, guardianId!, false),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.grey[700],
-                                        side: BorderSide(color: Colors.grey[300]!),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            handledStatus == 'ACCEPTED' ? Icons.check_circle : Icons.cancel,
+                                            size: 18,
+                                            color: handledStatus == 'ACCEPTED' ? Colors.green : Colors.grey,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            handledStatus == 'ACCEPTED' ? "Bạn đã chấp nhận" : "Bạn đã từ chối",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: handledStatus == 'ACCEPTED' ? Colors.green[800] : Colors.grey[700],
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      child: const Text("Từ chối"),
+                                    )
+                                  : Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () => _handleGuardianResponse(index, guardianId!, true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.blue,
+                                              foregroundColor: Colors.white,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            child: const Text("Chấp nhận"),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () => _handleGuardianResponse(index, guardianId!, false),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.grey[700],
+                                              side: BorderSide(color: Colors.grey[300]!),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            child: const Text("Từ chối"),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                              ),
                             ),
                         ],
                       ),
