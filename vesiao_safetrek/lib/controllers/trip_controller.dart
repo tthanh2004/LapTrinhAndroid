@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart'; // [MỚI] Thêm thư viện GPS
 import '../common/constants.dart';
 
 class TripController extends ChangeNotifier {
@@ -12,10 +13,15 @@ class TripController extends ChangeNotifier {
   Timer? _timer;
   int _remainingSeconds = 0;
 
-  int? currentTripId; 
-  final int currentUserId = 1; 
-  // LƯU Ý: Giữ nguyên IP mà bạn đang chạy được (Ví dụ IP dây cáp USB)
-  final String baseUrl = Constants.baseUrl; 
+  int? currentTripId;
+  // Mặc định là 0, sẽ được setUserId cập nhật từ UI
+  int currentUserId = 0; 
+  final String baseUrl = Constants.baseUrl;
+
+  // Hàm để UI cập nhật ID người dùng hiện tại vào Controller
+  void setUserId(int id) {
+    currentUserId = id;
+  }
 
   void setDuration(int minutes) {
     selectedMinutes = minutes;
@@ -36,7 +42,7 @@ class TripController extends ChangeNotifier {
         }),
       );
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
         currentTripId = data['tripId'];
         isMonitoring = true;
@@ -71,22 +77,47 @@ class TripController extends ChangeNotifier {
     }
   }
 
-  // 3. PANIC
-  Future<void> sendPanicAlert() async {
+  // 3. [NÂNG CẤP] GỬI PANIC (KÈM VỊ TRÍ GPS)
+  // Hàm này giờ đây tự lo mọi thứ: Lấy GPS -> Gửi API -> Trả về kết quả
+  Future<bool> sendPanicAlert() async {
     try {
-      final url = Uri.parse('$baseUrl/trips/panic');
-      await http.post(
+      // A. Lấy vị trí GPS hiện tại
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      // Lấy vị trí chính xác cao
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+
+      // B. Gọi API Panic
+      final url = Uri.parse('$baseUrl/emergency/panic');
+      final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'userId': currentUserId, 'tripId': currentTripId}),
+        body: jsonEncode({
+          'userId': currentUserId,
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'tripId': currentTripId // Có thể null nếu bấm ở Home (không trong chuyến đi)
+        }),
       );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        print("✅ Đã gửi SOS thành công tại: ${position.latitude}, ${position.longitude}");
+        return true;
+      } else {
+        print("❌ Lỗi Server Panic: ${response.body}");
+        return false;
+      }
     } catch (e) {
-      print("Lỗi panic: $e");
+      print("❌ Lỗi Panic Exception: $e");
+      return false;
     }
   }
 
-  // 4. CHECK PIN (MỚI)
-  // Trả về: 'SAFE', 'DURESS', 'INVALID' hoặc 'ERROR'
+  // 4. [NÂNG CẤP] CHECK PIN & TỰ ĐỘNG PANIC
   Future<String> verifyPin(String pin) async {
     try {
       final url = Uri.parse('$baseUrl/trips/verify-pin');
@@ -98,7 +129,15 @@ class TripController extends ChangeNotifier {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['status']; 
+        String status = data['status'];
+
+        // [QUAN TRỌNG] Nếu là mã DURESS (Khẩn cấp) -> Tự động kích hoạt Panic ngầm
+        if (status == 'DURESS') {
+          print("⚠️ Phát hiện mã PIN khẩn cấp! Đang gửi tọa độ...");
+          sendPanicAlert(); // Gọi hàm ở trên, không cần await để UI phản hồi ngay
+        }
+
+        return status; 
       }
     } catch (e) {
       print("Lỗi check PIN: $e");
@@ -115,6 +154,8 @@ class TripController extends ChangeNotifier {
         _updateFormattedTime();
         notifyListeners();
       } else {
+        // Hết giờ -> Tự động Panic
+        print("⏳ Hết giờ! Tự động gửi SOS...");
         sendPanicAlert(); 
         timer.cancel();
       }
