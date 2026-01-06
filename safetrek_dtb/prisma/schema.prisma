@@ -21,14 +21,8 @@ model User {
   passwordHash  String?   @map("password_hash") @db.VarChar(255)
   safePinHash   String?   @map("safe_pin_hash") @db.VarChar(255)
   duressPinHash String?   @map("duress_pin_hash") @db.VarChar(255)
-
-  otpCode       String?   @map("otp_code") @db.VarChar(10)
-  otpExpiry     DateTime? @map("otp_expiry")
-
-  fcmToken      String?   @map("fcm_token") @db.VarChar(255)
   lastKnownLat  Decimal?  @map("last_known_lat") @db.Decimal(10, 8)
   lastKnownLng  Decimal?  @map("last_known_lng") @db.Decimal(11, 8)
-  lastBattery   Int?      @map("last_battery_level") @db.SmallInt
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp()
 
   guardians     Guardian[]
