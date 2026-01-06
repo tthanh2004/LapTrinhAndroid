@@ -65,4 +65,8 @@ export class EmergencyController {
   async getNotifications(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getUserNotifications(userId);
   }
+  @Get('protecting/:userId')
+  async getPeopleIProtect(@Param('userId', ParseIntPipe) userId: number) {
+    return this.emergencyService.getPeopleIProtect(userId);
+  }
 }

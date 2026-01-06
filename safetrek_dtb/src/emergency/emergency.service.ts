@@ -191,4 +191,36 @@ export class EmergencyService {
       console.log('FCM Multicast Error', e);
     }
   }
+
+  async getPeopleIProtect(myUserId: number) {
+    // B1: Lấy thông tin của tôi để biết số điện thoại
+    const me = await this.prisma.user.findUnique({
+      where: { userId: myUserId },
+    });
+
+    if (!me || !me.phoneNumber) {
+      return [];
+    }
+
+    // B2: Tìm các record mà tôi là người bảo vệ
+    const records = await this.prisma.guardian.findMany({
+      where: { guardianPhone: me.phoneNumber },
+      include: {
+        user: true, // Join bảng User để lấy tên/sđt người được bảo vệ
+      },
+      orderBy: { status: 'asc' }, // PENDING lên đầu, ACCEPTED xuống dưới
+    });
+
+    // B3: Map dữ liệu trả về cho gọn
+    return records.map((r) => ({
+      guardianId: r.guardianId,
+      status: r.status,
+      protectedUser: {
+        userId: r.user.userId,
+        fullName: r.user.fullName ?? 'Không tên',
+        phoneNumber: r.user.phoneNumber,
+        avatarUrl: r.user.avatarUrl,
+      },
+    }));
+  }
 }
