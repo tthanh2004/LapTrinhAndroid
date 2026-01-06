@@ -77,7 +77,7 @@ class _ContactsTabState extends State<ContactsTab> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // 1. Header Xanh (Giống hình)
+          // 1. Header Xanh (Giống thiết kế)
           _buildBlueHeader(),
           
           // 2. Nội dung danh sách
@@ -89,20 +89,23 @@ class _ContactsTabState extends State<ContactsTab> {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                       children: [
-                        // Hộp thông tin (Giống hình)
+                        // Hộp thông tin (Màu xanh nhạt)
                         _buildInfoBox(),
                         const SizedBox(height: 20),
 
-                        // Danh sách người bảo vệ
+                        // Danh sách
                         if (_contacts.isEmpty)
                           _buildEmptyState()
                         else
                           ..._contacts.map((contact) => _buildContactCard(contact)),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 30),
                         
-                        // Nút Thêm người bảo vệ (Giống hình)
+                        // Nút Thêm (Màu xanh đậm)
                         _buildAddButton(),
+                        
+                        // Khoảng trống dưới cùng để không bị che bởi NavigationBar (nếu có)
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
@@ -112,7 +115,7 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- WIDGETS CON ---
+  // --- WIDGETS ---
 
   Widget _buildBlueHeader() {
     return Container(
@@ -123,7 +126,7 @@ class _ContactsTabState extends State<ContactsTab> {
         left: 20,
         right: 20,
       ),
-      color: const Color(0xFF1D4ED8), // Màu xanh đậm giống hình
+      color: const Color(0xFF2563EB), // Màu xanh Royal Blue
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -131,9 +134,11 @@ class _ContactsTabState extends State<ContactsTab> {
             children: const [
               Icon(Icons.people_alt_outlined, color: Colors.white, size: 32),
               SizedBox(width: 12),
-              Text(
-                "Danh sách người đang bảo vệ",
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  "Danh sách người đang bảo vệ",
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -142,7 +147,7 @@ class _ContactsTabState extends State<ContactsTab> {
             padding: const EdgeInsets.only(left: 44),
             child: Text(
               "${_contacts.length}/5 người đang bảo vệ",
-              style: TextStyle(color: Colors.blue[100], fontSize: 14),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
         ],
@@ -154,16 +159,16 @@ class _ContactsTabState extends State<ContactsTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF), // Màu nền xanh nhạt (blue 50)
+        color: const Color(0xFFEFF6FF), // Blue 50
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDBEAFE)), // Viền xanh nhạt
+        border: Border.all(color: const Color(0xFFDBEAFE)), // Blue 200
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
           Text(
             "Người đang bảo vệ là ai?",
-            style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 14),
+            style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 15),
           ),
           SizedBox(height: 8),
           Text(
@@ -183,13 +188,13 @@ class _ContactsTabState extends State<ContactsTab> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           )
         ],
       ),
@@ -197,9 +202,9 @@ class _ContactsTabState extends State<ContactsTab> {
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
-            // Avatar tròn xanh nhạt
+            // Avatar
             CircleAvatar(
-              radius: 26,
+              radius: 28,
               backgroundColor: const Color(0xFFDBEAFE), // Blue 100
               child: Text(
                 firstLetter,
@@ -215,7 +220,7 @@ class _ContactsTabState extends State<ContactsTab> {
                 children: [
                   Text(
                     contact['guardianName'],
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.black87),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -230,26 +235,26 @@ class _ContactsTabState extends State<ContactsTab> {
                   ),
                   const SizedBox(height: 6),
                   
-                  // Trạng thái (Xanh lá cây)
+                  // Trạng thái (Giống hệt hình: Icon check + Text xanh)
                   if (isAccepted)
                     Row(
                       children: const [
-                        Icon(Icons.check_circle_outline, size: 14, color: Color(0xFF22C55E)), // Green 500
+                        Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF22C55E)), // Green
                         SizedBox(width: 4),
                         Text(
                           "Đã chấp nhận",
-                          style: TextStyle(color: Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w500),
+                          style: TextStyle(color: Color(0xFF22C55E), fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ],
                     )
                   else
                     Row(
                       children: const [
-                        Icon(Icons.access_time, size: 14, color: Colors.orange),
+                        Icon(Icons.access_time, size: 16, color: Colors.orange),
                         SizedBox(width: 4),
                         Text(
                           "Chờ xác nhận",
-                          style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -257,13 +262,10 @@ class _ContactsTabState extends State<ContactsTab> {
               ),
             ),
 
-            // Nút xóa (Thùng rác đỏ)
-            InkWell(
-              onTap: () => _showDeleteConfirmDialog(contact['guardianId']),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                child: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)), // Red 500
-              ),
+            // Nút xóa (Icon thùng rác đỏ)
+            IconButton(
+              onPressed: () => _showDeleteConfirmDialog(contact['guardianId']),
+              icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
             ),
           ],
         ),
@@ -274,13 +276,14 @@ class _ContactsTabState extends State<ContactsTab> {
   Widget _buildAddButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 54,
       child: ElevatedButton(
         onPressed: () => _showAddModal(context),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF2563EB), // Màu xanh chủ đạo
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), // Bo tròn nhiều hơn giống button hiện đại
+          elevation: 4,
+          shadowColor: const Color(0xFF2563EB).withOpacity(0.4),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -289,7 +292,7 @@ class _ContactsTabState extends State<ContactsTab> {
             SizedBox(width: 8),
             Text(
               "Thêm người bảo vệ",
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -310,7 +313,7 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- MODAL & DIALOGS ---
+  // --- MODAL ---
 
   void _showAddModal(BuildContext context) {
     showModalBottomSheet(
