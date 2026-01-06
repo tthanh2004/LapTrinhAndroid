@@ -35,7 +35,7 @@ export class EmergencyController {
     return this.emergencyService.deleteGuardian(id);
   }
 
-  // [MỚI] API Phản hồi (Chấp nhận/Từ chối)
+  // API Phản hồi (Chấp nhận/Từ chối)
   @Post('guardians/respond')
   async respondToRequest(
     @Body() body: { guardianId: number; status: 'ACCEPTED' | 'REJECTED' },
@@ -61,12 +61,27 @@ export class EmergencyController {
     );
   }
 
+  // Lấy danh sách thông báo
   @Get('notifications/:userId')
   async getNotifications(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getUserNotifications(userId);
   }
+
+  // Lấy danh sách người tôi đang bảo vệ
   @Get('protecting/:userId')
   async getPeopleIProtect(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getPeopleIProtect(userId);
+  }
+
+  // API Đếm chưa đọc
+  @Get('notifications/unread/:userId')
+  async getUnreadCount(@Param('userId', ParseIntPipe) userId: number) {
+    return this.emergencyService.getUnreadCount(userId);
+  }
+
+  // API Đánh dấu đã đọc
+  @Post('notifications/read-all')
+  async markAllRead(@Body() body: { userId: number }) {
+    return this.emergencyService.markAllAsRead(body.userId);
   }
 }

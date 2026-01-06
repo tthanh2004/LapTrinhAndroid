@@ -141,7 +141,7 @@ class _ContactsTabState extends State<ContactsTab> {
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "Danh sách người đang bảo vệ",
+                  "Danh sách người bảo vệ",
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -151,7 +151,7 @@ class _ContactsTabState extends State<ContactsTab> {
           Padding(
             padding: const EdgeInsets.only(left: 44),
             child: Text(
-              "${_contacts.length}/5 người đang bảo vệ",
+              "${_contacts.length}/5 người bảo vệ",
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
@@ -172,7 +172,7 @@ class _ContactsTabState extends State<ContactsTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
           Text(
-            "Người đang bảo vệ là ai?",
+            "Người bảo vệ là ai?",
             style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 15),
           ),
           SizedBox(height: 8),

@@ -19,7 +19,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchNotifications();
+    _initData();
+  }
+
+  // Vừa lấy danh sách, vừa đánh dấu tất cả là đã đọc
+  Future<void> _initData() async {
+    await _markAllAsRead();
+    await _fetchNotifications();
+  }
+
+  Future<void> _markAllAsRead() async {
+    try {
+      await http.post(
+        Uri.parse('${Constants.baseUrl}/emergency/notifications/read-all'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': widget.userId}),
+      );
+    } catch (_) {}
   }
 
   Future<void> _fetchNotifications() async {
@@ -37,12 +53,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      debugPrint("Lỗi lấy thông báo: $e");
     }
   }
 
-  // --- Xử lý Chấp nhận / Từ chối ---
-  Future<void> _handleGuardianResponse(int index, int guardianId, bool isAccepted) async {
+  // Xử lý nút bấm -> Gọi API -> Load lại danh sách để cập nhật trạng thái mới nhất
+  Future<void> _handleGuardianResponse(int guardianId, bool isAccepted) async {
     try {
       final response = await http.post(
         Uri.parse('${Constants.baseUrl}/emergency/guardians/respond'),
@@ -55,22 +70,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (!mounted) return;
-        
-        // Cập nhật trạng thái hiển thị trực tiếp trên UI
-        setState(() {
-          // Thêm field 'handledStatus' vào item để đánh dấu đã xử lý
-          _notifications[index]['handledStatus'] = isAccepted ? 'ACCEPTED' : 'REJECTED';
-        });
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isAccepted ? "Đã chấp nhận lời mời" : "Đã từ chối lời mời"),
             backgroundColor: isAccepted ? Colors.green : Colors.grey,
           ),
         );
-      } else {
-        debugPrint("Lỗi server: ${response.body}");
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Có lỗi xảy ra"), backgroundColor: Colors.red));
+        // [QUAN TRỌNG] Load lại để cập nhật 'currentGuardianStatus' từ server
+        _fetchNotifications();
       }
     } catch (e) {
       debugPrint("Lỗi kết nối: $e");
@@ -120,19 +127,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     final isEmergency = notif['type'] == 'EMERGENCY';
                     final isRequest = notif['type'] == 'GUARDIAN_REQUEST';
                     
-                    // Kiểm tra xem đã xử lý chưa (từ biến local hoặc logic khác nếu có)
-                    // Lưu ý: Nếu load lại app, trạng thái này sẽ mất trừ khi Backend lưu vào DB.
-                    // Để đơn giản hiện tại ta dùng biến tạm trên RAM.
-                    final handledStatus = notif['handledStatus']; 
+                    // Lấy trạng thái hiện tại từ Server (đã được map thêm ở bước Backend trước)
+                    final String? currentStatus = notif['currentGuardianStatus']; // PENDING, ACCEPTED, REJECTED
 
                     int? guardianId;
                     if (isRequest && notif['data'] != null) {
                       try {
                         final dataObj = jsonDecode(notif['data']);
                         guardianId = dataObj['guardianId'];
-                      } catch (e) {
-                        debugPrint("Lỗi parse data: $e");
-                      }
+                      } catch (_) {}
                     }
 
                     return Container(
@@ -184,45 +187,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             ),
                           ),
                           
-                          // --- LOGIC HIỂN THỊ NÚT HOẶC TRẠNG THÁI ---
+                          // --- LOGIC HIỂN THỊ: Nút bấm hay Text đã xử lý ---
                           if (isRequest && guardianId != null)
                             Padding(
                               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-                              child: handledStatus != null
-                                  ? Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                      decoration: BoxDecoration(
-                                        color: handledStatus == 'ACCEPTED' ? Colors.green[50] : Colors.grey[100],
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: handledStatus == 'ACCEPTED' ? Colors.green[200]! : Colors.grey[300]!
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            handledStatus == 'ACCEPTED' ? Icons.check_circle : Icons.cancel,
-                                            size: 18,
-                                            color: handledStatus == 'ACCEPTED' ? Colors.green : Colors.grey,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            handledStatus == 'ACCEPTED' ? "Bạn đã chấp nhận" : "Bạn đã từ chối",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: handledStatus == 'ACCEPTED' ? Colors.green[800] : Colors.grey[700],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : Row(
+                              child: currentStatus == 'PENDING'
+                                  // 1. Nếu đang chờ (PENDING) -> Hiện 2 nút
+                                  ? Row(
                                       children: [
                                         Expanded(
                                           child: ElevatedButton(
-                                            onPressed: () => _handleGuardianResponse(index, guardianId!, true),
+                                            onPressed: () => _handleGuardianResponse(guardianId!, true),
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: Colors.blue,
                                               foregroundColor: Colors.white,
@@ -234,7 +209,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: OutlinedButton(
-                                            onPressed: () => _handleGuardianResponse(index, guardianId!, false),
+                                            onPressed: () => _handleGuardianResponse(guardianId!, false),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: Colors.grey[700],
                                               side: BorderSide(color: Colors.grey[300]!),
@@ -244,6 +219,36 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                           ),
                                         ),
                                       ],
+                                    )
+                                  // 2. Nếu ĐÃ XỬ LÝ (ACCEPTED / REJECTED) -> Hiện thông báo
+                                  : Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        color: currentStatus == 'ACCEPTED' ? Colors.green[50] : Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: currentStatus == 'ACCEPTED' ? Colors.green[200]! : Colors.grey[300]!
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            currentStatus == 'ACCEPTED' ? Icons.check_circle : Icons.cancel,
+                                            size: 18,
+                                            color: currentStatus == 'ACCEPTED' ? Colors.green : Colors.grey,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            currentStatus == 'ACCEPTED' ? "Bạn đã chấp nhận" : "Bạn đã từ chối",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: currentStatus == 'ACCEPTED' ? Colors.green[800] : Colors.grey[700],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                             ),
                         ],

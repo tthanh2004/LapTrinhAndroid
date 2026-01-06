@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as admin from 'firebase-admin';
-import { GuardianStatus } from '@prisma/client'; // Import Enum
+import { GuardianStatus } from '@prisma/client';
 
 @Injectable()
 export class EmergencyService {
@@ -19,7 +19,7 @@ export class EmergencyService {
     });
   }
 
-  // 2. Thêm người bảo vệ & Tạo thông báo mời
+  // 2. Thêm người bảo vệ
   async addGuardian(userId: number, name: string, phone: string) {
     const count = await this.prisma.guardian.count({ where: { userId } });
     if (count >= 5) throw new BadRequestException('Tối đa 5 người bảo vệ');
@@ -29,7 +29,6 @@ export class EmergencyService {
     });
     if (existing) throw new BadRequestException('Đã có trong danh sách');
 
-    // Tạo record Guardian (PENDING)
     const newGuardian = await this.prisma.guardian.create({
       data: {
         userId,
@@ -39,7 +38,6 @@ export class EmergencyService {
       },
     });
 
-    // --- LOGIC THÔNG BÁO ---
     const targetUser = await this.prisma.user.findUnique({
       where: { phoneNumber: phone },
     });
@@ -51,7 +49,6 @@ export class EmergencyService {
       const title = 'Lời mời bảo vệ';
       const body = `${requester?.fullName || 'Ai đó'} muốn thêm bạn làm người bảo vệ.`;
 
-      // a. Lưu vào DB
       await this.prisma.notification.create({
         data: {
           userId: targetUser.userId,
@@ -62,7 +59,6 @@ export class EmergencyService {
         },
       });
 
-      // b. Gửi Push Notification
       if (targetUser.fcmToken) {
         await this._sendPushToToken(targetUser.fcmToken, title, body, {
           type: 'GUARDIAN_REQUEST',
@@ -82,7 +78,7 @@ export class EmergencyService {
     }
   }
 
-  // 4. [MỚI] Xử lý phản hồi lời mời (Chấp nhận / Từ chối)
+  // 4. Phản hồi lời mời
   async respondToGuardianRequest(guardianId: number, status: GuardianStatus) {
     const guardian = await this.prisma.guardian.findUnique({
       where: { guardianId },
@@ -98,7 +94,7 @@ export class EmergencyService {
     });
   }
 
-  // 5. Bắn SOS & Lưu thông báo
+  // 5. Trigger Panic
   async triggerPanicAlert(userId: number, lat: number, lng: number) {
     const sender = await this.prisma.user.findUnique({ where: { userId } });
     if (!sender) throw new NotFoundException('Không tìm thấy User');
@@ -147,12 +143,80 @@ export class EmergencyService {
     return { success: true, notifiedCount: tokens.length };
   }
 
-  // 6. Lấy danh sách thông báo
+  // 6. Lấy danh sách thông báo (Kèm status)
   async getUserNotifications(userId: number) {
-    return this.prisma.notification.findMany({
+    const notifications = await this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+
+    return await Promise.all(
+      notifications.map(async (notif) => {
+        let extraInfo = {};
+        if (notif.type === 'GUARDIAN_REQUEST' && notif.data) {
+          try {
+            // [SỬA LỖI] Ép kiểu rõ ràng thay vì để any
+            const dataObj = JSON.parse(notif.data) as { guardianId: number };
+            const guardianId = dataObj.guardianId;
+
+            const guardian = await this.prisma.guardian.findUnique({
+              where: { guardianId },
+              select: { status: true },
+            });
+            if (guardian) {
+              extraInfo = { currentGuardianStatus: guardian.status };
+            }
+          } catch (e) {
+            // [SỬA LỖI] Log lỗi thay vì để trống
+            console.error('Error parsing notification data:', e);
+          }
+        }
+        return { ...notif, ...extraInfo };
+      }),
+    );
+  }
+
+  // 7. Lấy danh sách người tôi đang bảo vệ
+  async getPeopleIProtect(myUserId: number) {
+    const me = await this.prisma.user.findUnique({
+      where: { userId: myUserId },
+    });
+
+    if (!me || !me.phoneNumber) return [];
+
+    const records = await this.prisma.guardian.findMany({
+      where: { guardianPhone: me.phoneNumber },
+      include: { user: true },
+      orderBy: { status: 'asc' },
+    });
+
+    return records.map((r) => ({
+      guardianId: r.guardianId,
+      status: r.status,
+      protectedUser: {
+        userId: r.user.userId,
+        fullName: r.user.fullName ?? 'Không tên',
+        phoneNumber: r.user.phoneNumber,
+        avatarUrl: r.user.avatarUrl,
+      },
+    }));
+  }
+
+  // 8. Đếm chưa đọc
+  async getUnreadCount(userId: number) {
+    const count = await this.prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+    return { count };
+  }
+
+  // 9. Đánh dấu đã đọc
+  async markAllAsRead(userId: number) {
+    await this.prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+    return { success: true };
   }
 
   // --- HELPERS ---
@@ -166,7 +230,7 @@ export class EmergencyService {
       await admin.messaging().send({
         token,
         notification: { title, body },
-        data: data,
+        data,
         android: { priority: 'high' },
       });
     } catch (e) {
@@ -184,43 +248,11 @@ export class EmergencyService {
       await admin.messaging().sendEachForMulticast({
         tokens,
         notification: { title, body },
-        data: data,
+        data,
         android: { priority: 'high' },
       });
     } catch (e) {
       console.log('FCM Multicast Error', e);
     }
-  }
-
-  async getPeopleIProtect(myUserId: number) {
-    // B1: Lấy thông tin của tôi để biết số điện thoại
-    const me = await this.prisma.user.findUnique({
-      where: { userId: myUserId },
-    });
-
-    if (!me || !me.phoneNumber) {
-      return [];
-    }
-
-    // B2: Tìm các record mà tôi là người bảo vệ
-    const records = await this.prisma.guardian.findMany({
-      where: { guardianPhone: me.phoneNumber },
-      include: {
-        user: true, // Join bảng User để lấy tên/sđt người được bảo vệ
-      },
-      orderBy: { status: 'asc' }, // PENDING lên đầu, ACCEPTED xuống dưới
-    });
-
-    // B3: Map dữ liệu trả về cho gọn
-    return records.map((r) => ({
-      guardianId: r.guardianId,
-      status: r.status,
-      protectedUser: {
-        userId: r.user.userId,
-        fullName: r.user.fullName ?? 'Không tên',
-        phoneNumber: r.user.phoneNumber,
-        avatarUrl: r.user.avatarUrl,
-      },
-    }));
   }
 }
