@@ -20,7 +20,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     _loadData();
   }
 
-  // Load từ API thật
+  // Load danh sách từ API
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final data = await _guardianService.fetchPeopleIProtect(widget.userId);
@@ -37,8 +37,12 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     bool success = await _guardianService.respondToRequest(guardianId, accept);
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(accept ? "Đã chấp nhận" : "Đã từ chối"), backgroundColor: accept ? Colors.green : Colors.grey),
+        SnackBar(
+          content: Text(accept ? "Đã chấp nhận bảo vệ" : "Đã từ chối"),
+          backgroundColor: accept ? Colors.green : Colors.grey,
+        ),
       );
+      // [QUAN TRỌNG] Gọi lại hàm load data để cập nhật UI ngay lập tức
       _loadData(); 
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -52,13 +56,13 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2563EB), // Xanh Royal Blue
+        backgroundColor: const Color(0xFF2563EB),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        titleSpacing: 0, // Giảm khoảng cách để icon gần nút back hơn
+        titleSpacing: 0,
         title: Row(
           children: [
             const Icon(Icons.people_alt_outlined, color: Colors.white, size: 28),
@@ -66,14 +70,8 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Danh sách người đang bảo vệ",
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  "${_protectedPeople.length} người đang bảo vệ",
-                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.normal),
-                ),
+                const Text("Danh sách người đang bảo vệ", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text("${_protectedPeople.length} người đang bảo vệ", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.normal)),
               ],
             ),
           ],
@@ -89,16 +87,12 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                       children: [
-                        // Hộp thông tin (Giống ảnh)
                         _buildInfoBox(),
                         const SizedBox(height: 20),
-
                         if (_protectedPeople.isEmpty)
                           _buildEmptyState()
                         else
                           ..._protectedPeople.map((person) => _buildPersonCard(person)),
-                        
-                        // Không có nút "Thêm" ở đây vì đây là danh sách thụ động
                       ],
                     ),
                   ),
@@ -112,22 +106,16 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF), // Blue 50
+        color: const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFDBEAFE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
-          Text(
-            "Danh sách này là gì?",
-            style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 15),
-          ),
+          Text("Danh sách này là gì?", style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 15)),
           SizedBox(height: 8),
-          Text(
-            "Đây là những người đã thêm bạn làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.",
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
-          ),
+          Text("Đây là những người đã thêm bạn làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.", style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4)),
         ],
       ),
     );
@@ -150,7 +138,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
 
   Widget _buildPersonCard(dynamic item) {
     final user = item['protectedUser'];
-    final status = item['status'];
+    final status = item['status']; // Lấy status trực tiếp từ API (đã được cập nhật sau khi _loadData)
     final guardianId = item['guardianId'];
     
     bool isAccepted = status == 'ACCEPTED';
@@ -164,13 +152,7 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -178,18 +160,12 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
           children: [
             Row(
               children: [
-                // Avatar màu xanh dương nhạt giống ảnh
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: const Color(0xFFDBEAFE), // Blue 100
-                  child: Text(
-                    firstLetter, 
-                    style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 20)
-                  ),
+                  backgroundColor: const Color(0xFFDBEAFE),
+                  child: Text(firstLetter, style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 20)),
                 ),
                 const SizedBox(width: 16),
-                
-                // Thông tin
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,17 +180,12 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      
-                      // Trạng thái
                       if (isAccepted)
                         Row(
                           children: const [
-                            Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF22C55E)), // Green
+                            Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF22C55E)),
                             SizedBox(width: 4),
-                            Text(
-                              "Đã chấp nhận",
-                              style: TextStyle(color: Color(0xFF22C55E), fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
+                            Text("Đã chấp nhận", style: TextStyle(color: Color(0xFF22C55E), fontSize: 13, fontWeight: FontWeight.w500)),
                           ],
                         )
                       else
@@ -222,20 +193,16 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                           children: const [
                             Icon(Icons.access_time, size: 16, color: Colors.orange),
                             SizedBox(width: 4),
-                            Text(
-                              "Đang chờ xác nhận",
-                              style: TextStyle(color: Colors.orange, fontSize: 13, fontStyle: FontStyle.italic),
-                            ),
+                            Text("Đang chờ xác nhận", style: TextStyle(color: Colors.orange, fontSize: 13, fontStyle: FontStyle.italic)),
                           ],
                         ),
                     ],
                   ),
                 ),
-                // Xóa icon thùng rác (để giống ảnh)
               ],
             ),
             
-            // Nếu chưa chấp nhận (PENDING) -> Hiển thị nút bấm
+            // Chỉ hiện nút bấm khi status khác ACCEPTED
             if (!isAccepted) ...[
               const SizedBox(height: 16),
               const Divider(height: 1, color: Colors.grey),
