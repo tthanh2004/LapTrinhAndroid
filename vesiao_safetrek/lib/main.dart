@@ -3,27 +3,37 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:permission_handler/permission_handler.dart'; // [MỚI]
+import 'package:permission_handler/permission_handler.dart';
+
+// [QUAN TRỌNG] Import file cấu hình Firebase đã tạo
+import 'firebase_options.dart'; 
 
 import 'common/constants.dart';
 import 'controllers/trip_controller.dart';
 import 'screens/mobile/auth/login_screen.dart';
-// Import các màn hình khác của bạn...
 
+// Handler xử lý tin nhắn khi app tắt (Background)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // [SỬA] Phải truyền options vào đây để chạy được trên Web/Android
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   print("Handling a background message: ${message.messageId}");
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // Nhớ thêm options nếu là Web
+
+  // [SỬA] Sử dụng DefaultFirebaseOptions để tự động chọn cấu hình cho Web/Android/iOS
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // Đăng ký background handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // [MỚI] Xin quyền ngay khi khởi động
+  // Xin quyền ngay khi khởi động
   await _requestInitialPermissions();
 
   runApp(
@@ -34,7 +44,7 @@ void main() async {
   );
 }
 
-// [MỚI] Hàm xin quyền khởi động
+// Hàm xin quyền khởi động
 Future<void> _requestInitialPermissions() async {
   // 1. Quyền GPS
   await Permission.location.request();
@@ -57,23 +67,33 @@ class _SafeTrekAppState extends State<SafeTrekApp> {
   }
 
   Future<void> _setupInteractedMessage() async {
-    // Lấy thông báo khiến app mở từ trạng thái tắt
+    // 1. Xin quyền thông báo từ Firebase (quan trọng cho iOS/Web)
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // 2. Lấy thông báo khiến app mở từ trạng thái tắt
     RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
       _handleMessage(initialMessage);
     }
-    // Lắng nghe khi app chạy ngầm
+    
+    // 3. Lắng nghe khi app chạy ngầm và người dùng bấm thông báo
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
   }
 
   // Xử lý mở Google Maps khi bấm thông báo
   void _handleMessage(RemoteMessage message) async {
+    // Kiểm tra loại thông báo
     if (message.data['type'] == 'EMERGENCY_PANIC') {
       double lat = double.tryParse(message.data['latitude'].toString()) ?? 0.0;
       double lng = double.tryParse(message.data['longitude'].toString()) ?? 0.0;
 
-      // Link mở ứng dụng Google Maps
-      final Uri googleUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng?q=$lat,$lng');
+      // [SỬA] Link Google Maps chuẩn để mở tọa độ
+      final Uri googleUrl = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
 
       try {
         if (await canLaunchUrl(googleUrl)) {
