@@ -37,9 +37,9 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     bool success = await _guardianService.respondToRequest(guardianId, accept);
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(accept ? "Đã chấp nhận bảo vệ" : "Đã từ chối"), backgroundColor: accept ? Colors.green : Colors.grey),
+        SnackBar(content: Text(accept ? "Đã chấp nhận" : "Đã từ chối"), backgroundColor: accept ? Colors.green : Colors.grey),
       );
-      _loadData(); // Load lại danh sách sau khi thao tác
+      _loadData(); 
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Có lỗi xảy ra, vui lòng thử lại"), backgroundColor: Colors.red),
@@ -52,41 +52,57 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Người bạn bảo vệ", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF2563EB),
+        backgroundColor: const Color(0xFF2563EB), // Xanh Royal Blue
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        titleSpacing: 0, // Giảm khoảng cách để icon gần nút back hơn
+        title: Row(
+          children: [
+            const Icon(Icons.people_alt_outlined, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Danh sách người đang bảo vệ",
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "${_protectedPeople.length} người đang bảo vệ",
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
-          _buildInfoBox(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _protectedPeople.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _protectedPeople.length,
-                        separatorBuilder: (ctx, i) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          return _buildPersonCard(_protectedPeople[index]);
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
+                : RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                      children: [
+                        // Hộp thông tin (Giống ảnh)
+                        _buildInfoBox(),
+                        const SizedBox(height: 20),
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.shield_outlined, size: 60, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text("Chưa có ai thêm bạn làm người bảo vệ", style: TextStyle(color: Colors.grey[500])),
+                        if (_protectedPeople.isEmpty)
+                          _buildEmptyState()
+                        else
+                          ..._protectedPeople.map((person) => _buildPersonCard(person)),
+                        
+                        // Không có nút "Thêm" ở đây vì đây là danh sách thụ động
+                      ],
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -94,16 +110,40 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
 
   Widget _buildInfoBox() {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(16),
-      color: const Color(0xFFEFF6FF),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF), // Blue 50
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDBEAFE)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
-          Text("Danh sách này là gì?", style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold)),
-          SizedBox(height: 4),
-          Text("Đây là những người đã thêm BẠN làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.", style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4)),
+          Text(
+            "Danh sách này là gì?",
+            style: TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Đây là những người đã thêm bạn làm người bảo vệ. Bạn sẽ nhận được thông báo SOS khi họ gặp nguy hiểm.",
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(Icons.shield_outlined, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text("Chưa có ai thêm bạn làm người bảo vệ", style: TextStyle(color: Colors.grey[500])),
+          ],
+        ),
       ),
     );
   }
@@ -119,11 +159,18 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
     String firstLetter = fullName.isNotEmpty ? fullName[0].toUpperCase() : "?";
 
     return Container(
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -131,34 +178,64 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
           children: [
             Row(
               children: [
+                // Avatar màu xanh dương nhạt giống ảnh
                 CircleAvatar(
-                  radius: 26,
-                  backgroundColor: isAccepted ? Colors.green.shade50 : Colors.orange.shade50,
+                  radius: 28,
+                  backgroundColor: const Color(0xFFDBEAFE), // Blue 100
                   child: Text(
                     firstLetter, 
-                    style: TextStyle(color: isAccepted ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 20)
+                    style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 20)
                   ),
                 ),
                 const SizedBox(width: 16),
+                
+                // Thông tin
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 4),
-                      Text(phone, style: const TextStyle(color: Colors.grey)),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone, size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(phone, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                        ],
+                      ),
                       const SizedBox(height: 6),
+                      
+                      // Trạng thái
                       if (isAccepted)
-                        Row(children: const [Icon(Icons.shield, size: 14, color: Colors.green), SizedBox(width: 4), Text("Đang bảo vệ", style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold))])
+                        Row(
+                          children: const [
+                            Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF22C55E)), // Green
+                            SizedBox(width: 4),
+                            Text(
+                              "Đã chấp nhận",
+                              style: TextStyle(color: Color(0xFF22C55E), fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        )
                       else
-                        const Text("Đang chờ bạn xác nhận", style: TextStyle(color: Colors.orange, fontSize: 12, fontStyle: FontStyle.italic)),
+                        Row(
+                          children: const [
+                            Icon(Icons.access_time, size: 16, color: Colors.orange),
+                            SizedBox(width: 4),
+                            Text(
+                              "Đang chờ xác nhận",
+                              style: TextStyle(color: Colors.orange, fontSize: 13, fontStyle: FontStyle.italic),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
+                // Xóa icon thùng rác (để giống ảnh)
               ],
             ),
             
-            // Nếu chưa chấp nhận (PENDING) -> Hiển thị nút Chấp nhận / Từ chối
+            // Nếu chưa chấp nhận (PENDING) -> Hiển thị nút bấm
             if (!isAccepted) ...[
               const SizedBox(height: 16),
               const Divider(height: 1, color: Colors.grey),
@@ -168,7 +245,11 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _handleResponse(guardianId, false),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.grey, side: BorderSide(color: Colors.grey.shade300)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[700],
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       child: const Text("Từ chối"),
                     ),
                   ),
@@ -176,7 +257,11 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _handleResponse(guardianId, true),
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       child: const Text("Chấp nhận"),
                     ),
                   ),
