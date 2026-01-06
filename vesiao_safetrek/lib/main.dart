@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart'; // [MỚI] Import mở link
+import 'firebase_options.dart';
 
 import 'common/constants.dart';
 import 'controllers/trip_controller.dart';
@@ -21,8 +22,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   // [MỚI] Khởi tạo môi trường
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  
+
+  // Sử dụng DefaultFirebaseOptions
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   // Đăng ký handler chạy ngầm
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
