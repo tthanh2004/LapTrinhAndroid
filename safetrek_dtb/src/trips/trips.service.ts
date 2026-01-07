@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as bcrypt from 'bcrypt';
 import { TripStatus } from '@prisma/client'; // <--- 1. Import Enum từ Prisma
@@ -9,16 +9,34 @@ export class TripsService {
 
   // 1. Logic Bắt đầu
   async startTrip(userId: number, duration: number, dest?: string) {
-    const trip = await this.prisma.trip.create({
-      data: {
-        userId: userId,
-        durationMinutes: duration,
-        destinationName: dest,
-        expectedEndTime: new Date(new Date().getTime() + duration * 60000),
-        status: TripStatus.ACTIVE, // <--- 2. Dùng Enum thay vì string cứng 'ACTIVE'
-      },
-    });
-    return { message: 'Trip started', tripId: trip.tripId };
+    try {
+      // Log dữ liệu đầu vào để kiểm tra
+      console.log('--- START TRIP REQUEST ---');
+      console.log('UserID:', userId, typeof userId);
+      console.log('Duration:', duration, typeof duration);
+
+      const trip = await this.prisma.trip.create({
+        data: {
+          userId: userId, // Kiểm tra xem userId này có tồn tại trong bảng User chưa?
+          durationMinutes: duration,
+          destinationName: dest,
+          expectedEndTime: new Date(new Date().getTime() + duration * 60000),
+          status: TripStatus.ACTIVE,
+        },
+      });
+
+      console.log('✅ Trip Created:', trip.tripId);
+      return { message: 'Trip started', tripId: trip.tripId };
+    } catch (error) {
+      // In lỗi chi tiết ra Terminal của Backend
+      console.error('❌ LỖI KHI TẠO TRIP:', error);
+
+      // Ném lỗi ra để Postman/Flutter thấy
+      throw new InternalServerErrorException(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        `Lỗi tạo chuyến đi: ${error.message}`,
+      );
+    }
   }
 
   // 2. Logic Kết thúc (Đã sửa chuẩn)

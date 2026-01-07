@@ -1,11 +1,17 @@
 import 'dart:async';
 import 'dart:ui';
+// [MỚI] Import thư viện để kiểm tra nền tảng Web
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 
 // Hàm khởi tạo Service (Hàm này được gọi ở main.dart)
 Future<void> initializeBackgroundService() async {
+  // [QUAN TRỌNG] Nếu là Web thì dừng ngay lập tức, không chạy tiếp để tránh lỗi
+  if (kIsWeb) return;
+
   final service = FlutterBackgroundService();
 
   // Tạo kênh thông báo cho Android (bắt buộc để chạy foreground service)
@@ -19,9 +25,12 @@ Future<void> initializeBackgroundService() async {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(channel);
+  // Chỉ chạy đoạn này trên Android
+  if (!kIsWeb) { // Check lại cho chắc chắn
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
@@ -77,8 +86,6 @@ void onStart(ServiceInstance service) async {
       if (await service.isForegroundService()) {
         
         // 1. Lấy tọa độ GPS
-        // Lưu ý: Cần xử lý check quyền ở đây nếu cần thiết, 
-        // nhưng thường quyền đã được xin ở UI chính rồi.
         try {
           Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
           print('📍 BG Location: ${position.latitude}, ${position.longitude}');
