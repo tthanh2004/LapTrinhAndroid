@@ -53,17 +53,21 @@ export class EmergencyController {
     );
   }
 
-  // 5. API Kích hoạt Panic (Gửi thông báo khẩn cấp)
+  // ==========================================================
+  // 5. API Kích hoạt Panic (ĐÃ CẬP NHẬT THÊM tripId)
+  // ==========================================================
   @Post('panic')
   async triggerPanic(
-    @Body() body: { userId: number; lat: number; lng: number },
+    @Body() body: { userId: number; lat: number; lng: number; tripId?: number },
   ) {
     return this.emergencyService.triggerPanicAlert(
       body.userId,
       body.lat,
       body.lng,
+      body.tripId, // Truyền thêm tripId vào service
     );
   }
+  // ==========================================================
 
   // 6. Lấy danh sách thông báo
   @Get('notifications/:userId')
@@ -88,7 +92,8 @@ export class EmergencyController {
   async markAllRead(@Body() body: { userId: number }) {
     return this.emergencyService.markAllAsRead(body.userId);
   }
-  @Post('notifications/send') // Đặt đường dẫn rõ ràng
+
+  @Post('notifications/send')
   async sendNotification(
     @Body() body: { userId: number; title: string; body: string },
   ) {

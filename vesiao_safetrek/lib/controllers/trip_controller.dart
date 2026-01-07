@@ -2,11 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:geolocator/geolocator.dart'; // [MỚI] Thêm thư viện GPS
+import 'package:geolocator/geolocator.dart'; 
 import '../common/constants.dart';
 
 class TripController extends ChangeNotifier {
-  // --- STATE ---
   bool isMonitoring = false;
   int selectedMinutes = 15;
   String formattedTime = "00:00";
@@ -14,13 +13,13 @@ class TripController extends ChangeNotifier {
   int _remainingSeconds = 0;
 
   int? currentTripId;
-  // Mặc định là 0, sẽ được setUserId cập nhật từ UI
   int currentUserId = 0; 
+  
   final String baseUrl = Constants.baseUrl;
 
-  // Hàm để UI cập nhật ID người dùng hiện tại vào Controller
   void setUserId(int id) {
     currentUserId = id;
+    notifyListeners();
   }
 
   void setDuration(int minutes) {
@@ -28,8 +27,12 @@ class TripController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 1. START TRIP
   Future<void> startTrip(String? destination) async {
+    if (currentUserId <= 0) {
+      print("❌ Lỗi: Chưa có thông tin UserID");
+      return;
+    }
+
     try {
       final url = Uri.parse('$baseUrl/trips/start');
       final response = await http.post(
@@ -48,15 +51,15 @@ class TripController extends ChangeNotifier {
         isMonitoring = true;
         _startTimer();
         notifyListeners();
+        print("✅ Trip Started: ID $currentTripId");
       } else {
-        print("Lỗi Server: ${response.body}");
+        print("❌ Lỗi Server Start: ${response.body}");
       }
     } catch (e) {
-      print("Lỗi kết nối: $e");
+      print("❌ Lỗi kết nối: $e");
     }
   }
 
-  // 2. STOP TRIP
   Future<void> stopTrip({bool isSafe = true}) async {
     if (currentTripId == null) return;
     try {
@@ -72,52 +75,62 @@ class TripController extends ChangeNotifier {
       isMonitoring = false;
       currentTripId = null;
       notifyListeners();
+      print("✅ Trip Ended: ${isSafe ? 'Safe' : 'Duress'}");
     } catch (e) {
-      print("Lỗi stop: $e");
+      print("❌ Lỗi Stop Trip: $e");
     }
   }
 
-  // 3. [NÂNG CẤP] GỬI PANIC (KÈM VỊ TRÍ GPS)
-  // Hàm này giờ đây tự lo mọi thứ: Lấy GPS -> Gửi API -> Trả về kết quả
+  // [HÀM QUAN TRỌNG ĐÃ SỬA]
   Future<bool> sendPanicAlert() async {
     try {
-      // A. Lấy vị trí GPS hiện tại
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      // Lấy vị trí chính xác cao
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high
-      );
+      print("⚠️ Đang chuẩn bị gửi SOS...");
 
-      // B. Gọi API Panic
+      Position? position;
+      try {
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+           position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 5),
+          );
+        }
+      } catch (gpsError) {
+        print("⚠️ GPS Error: $gpsError");
+      }
+
+      // [QUAN TRỌNG] Đã trỏ về Emergency Controller
       final url = Uri.parse('$baseUrl/emergency/panic');
+      
+      final bodyData = {
+        'userId': currentUserId,
+        'lat': position?.latitude ?? 0.0, // Backend yêu cầu 'lat'
+        'lng': position?.longitude ?? 0.0, // Backend yêu cầu 'lng'
+        'tripId': currentTripId, 
+      };
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': currentUserId,
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'tripId': currentTripId // Có thể null nếu bấm ở Home (không trong chuyến đi)
-        }),
+        body: jsonEncode(bodyData),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print("✅ Đã gửi SOS thành công tại: ${position.latitude}, ${position.longitude}");
+        print("✅ SOS SENT SUCCESSFULLY!");
         return true;
       } else {
-        print("❌ Lỗi Server Panic: ${response.body}");
+        print("❌ Server Refused Panic: ${response.body}");
         return false;
       }
     } catch (e) {
-      print("❌ Lỗi Panic Exception: $e");
+      print("❌ Panic Exception: $e");
       return false;
     }
   }
 
-  // 4. [NÂNG CẤP] CHECK PIN & TỰ ĐỘNG PANIC
   Future<String> verifyPin(String pin) async {
     try {
       final url = Uri.parse('$baseUrl/trips/verify-pin');
@@ -129,18 +142,16 @@ class TripController extends ChangeNotifier {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        String status = data['status'];
+        String status = data['status'] ?? 'INVALID';
 
-        // [QUAN TRỌNG] Nếu là mã DURESS (Khẩn cấp) -> Tự động kích hoạt Panic ngầm
         if (status == 'DURESS') {
-          print("⚠️ Phát hiện mã PIN khẩn cấp! Đang gửi tọa độ...");
-          sendPanicAlert(); // Gọi hàm ở trên, không cần await để UI phản hồi ngay
+          print("⚠️ DURESS PIN! Triggering Panic...");
+          sendPanicAlert(); 
         }
-
         return status; 
       }
     } catch (e) {
-      print("Lỗi check PIN: $e");
+      print("❌ Error Verify PIN: $e");
     }
     return "ERROR";
   }
@@ -148,15 +159,16 @@ class TripController extends ChangeNotifier {
   void _startTimer() {
     _remainingSeconds = selectedMinutes * 60;
     _updateFormattedTime();
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
         _remainingSeconds--;
         _updateFormattedTime();
         notifyListeners();
       } else {
-        // Hết giờ -> Tự động Panic
-        print("⏳ Hết giờ! Tự động gửi SOS...");
+        print("⏳ Timeout! Triggering SOS...");
         sendPanicAlert(); 
+        stopTrip(isSafe: false);
         timer.cancel();
       }
     });

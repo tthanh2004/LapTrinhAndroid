@@ -11,6 +11,10 @@ import { GuardianStatus } from '@prisma/client';
 export class EmergencyService {
   constructor(private prisma: PrismaService) {}
 
+  // =================================================================
+  // PHẦN 1: QUẢN LÝ NGƯỜI BẢO VỆ (GUARDIANS)
+  // =================================================================
+
   // 1. Lấy danh sách người bảo vệ
   async getGuardians(userId: number) {
     return this.prisma.guardian.findMany({
@@ -94,21 +98,71 @@ export class EmergencyService {
     });
   }
 
+  // =================================================================
+  // PHẦN 2: BÁO ĐỘNG KHẨN CẤP (PANIC) - LOGIC THÔNG MINH
+  // =================================================================
+
   // 5. Trigger Panic
-  async triggerPanicAlert(userId: number, lat: number, lng: number) {
+  async triggerPanicAlert(
+    userId: number,
+    lat: number,
+    lng: number,
+    tripId?: number,
+  ) {
+    console.log(
+      `🚨 PANIC ALERT: User ${userId} | Trip: ${tripId} | Loc: [${lat}, ${lng}]`,
+    );
+
     const sender = await this.prisma.user.findUnique({ where: { userId } });
     if (!sender) throw new NotFoundException('Không tìm thấy User');
 
+    // BƯỚC A: Luôn cập nhật vị trí mới nhất vào bảng User
+    await this.prisma.user.update({
+      where: { userId },
+      data: {
+        lastKnownLat: lat,
+        lastKnownLng: lng,
+      },
+    });
+
+    // BƯỚC B: Tạo Alert (Ghi nhận sự kiện)
+    await this.prisma.alert.create({
+      data: {
+        userId: userId,
+        tripId: tripId, // Nếu null thì thôi
+        alertType: 'PANIC_BUTTON',
+      },
+    });
+
+    // BƯỚC C: Chỉ lưu vào TripLocation NẾU đang có chuyến đi (tripId tồn tại)
+    if (tripId) {
+      try {
+        await this.prisma.tripLocation.create({
+          data: {
+            tripId: tripId,
+            lat: lat,
+            lng: lng,
+          },
+        });
+        console.log('✅ Đã lưu điểm Panic vào lịch sử TripLocation');
+      } catch (e) {
+        console.warn(
+          '⚠️ Lỗi lưu TripLocation (Có thể tripId không hợp lệ):',
+          e,
+        );
+      }
+    }
+
+    // BƯỚC D: Gửi thông báo cho người thân
     const guardians = await this.prisma.guardian.findMany({
       where: { userId, status: 'ACCEPTED' },
       select: { guardianPhone: true },
     });
 
     if (guardians.length === 0)
-      return { success: true, message: 'Chưa có người bảo vệ' };
+      return { success: true, message: 'Đã lưu Alert (Chưa có người bảo vệ)' };
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
-
     const usersToNotify = await this.prisma.user.findMany({
       where: { phoneNumber: { in: guardianPhones } },
       select: { userId: true, fcmToken: true, fullName: true },
@@ -125,25 +179,32 @@ export class EmergencyService {
           title: title,
           body: body,
           type: 'EMERGENCY',
-          data: JSON.stringify({ lat, lng }),
+          // Lưu tọa độ vào data để App người thân bấm vào là nhảy tới map
+          data: JSON.stringify({ lat, lng, tripId }),
         },
       });
       if (u.fcmToken) tokens.push(u.fcmToken);
     }
 
     if (tokens.length > 0) {
-      await this._sendPushMulticast(tokens, title, body, {
+      const fcmData: Record<string, string> = {
         latitude: lat.toString(),
         longitude: lng.toString(),
         type: 'EMERGENCY_PANIC',
         senderPhone: sender.phoneNumber || '',
-      });
+      };
+
+      await this._sendPushMulticast(tokens, title, body, fcmData);
     }
 
     return { success: true, notifiedCount: tokens.length };
   }
 
-  // 6. Lấy danh sách thông báo (Kèm status)
+  // =================================================================
+  // PHẦN 3: THÔNG BÁO & TIỆN ÍCH KHÁC
+  // =================================================================
+
+  // 6. Lấy danh sách thông báo (Kèm status lời mời nếu có)
   async getUserNotifications(userId: number) {
     const notifications = await this.prisma.notification.findMany({
       where: { userId },
@@ -155,7 +216,6 @@ export class EmergencyService {
         let extraInfo = {};
         if (notif.type === 'GUARDIAN_REQUEST' && notif.data) {
           try {
-            // [SỬA LỖI] Ép kiểu rõ ràng thay vì để any
             const dataObj = JSON.parse(notif.data) as { guardianId: number };
             const guardianId = dataObj.guardianId;
 
@@ -167,7 +227,6 @@ export class EmergencyService {
               extraInfo = { currentGuardianStatus: guardian.status };
             }
           } catch (e) {
-            // [SỬA LỖI] Log lỗi thay vì để trống
             console.error('Error parsing notification data:', e);
           }
         }
@@ -202,7 +261,7 @@ export class EmergencyService {
     }));
   }
 
-  // 8. Đếm chưa đọc
+  // 8. Đếm thông báo chưa đọc
   async getUnreadCount(userId: number) {
     const count = await this.prisma.notification.count({
       where: { userId, isRead: false },
@@ -210,7 +269,7 @@ export class EmergencyService {
     return { count };
   }
 
-  // 9. Đánh dấu đã đọc
+  // 9. Đánh dấu tất cả đã đọc
   async markAllAsRead(userId: number) {
     await this.prisma.notification.updateMany({
       where: { userId, isRead: false },
@@ -219,7 +278,20 @@ export class EmergencyService {
     return { success: true };
   }
 
-  // --- HELPERS ---
+  // 10. Gửi thông báo thủ công (Test)
+  async sendManualNotification(userId: number, title: string, body: string) {
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (user?.fcmToken) {
+      await this._sendPushToToken(user.fcmToken, title, body, {
+        type: 'NORMAL_MESSAGE',
+      });
+      return { success: true };
+    }
+    return { success: false, message: 'User has no token' };
+  }
+
+  // --- HELPERS (FCM) ---
+
   private async _sendPushToToken(
     token: string,
     title: string,
@@ -254,15 +326,5 @@ export class EmergencyService {
     } catch (e) {
       console.log('FCM Multicast Error', e);
     }
-  }
-  async sendManualNotification(userId: number, title: string, body: string) {
-    const user = await this.prisma.user.findUnique({ where: { userId } });
-    if (user?.fcmToken) {
-      await this._sendPushToToken(user.fcmToken, title, body, {
-        type: 'NORMAL_MESSAGE',
-      });
-      return { success: true };
-    }
-    return { success: false, message: 'User has no token' };
   }
 }
