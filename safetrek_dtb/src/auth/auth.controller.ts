@@ -49,4 +49,15 @@ export class AuthController {
   async updateFcmToken(@Body() body: { userId: number; token: string }) {
     return this.authService.updateFcmToken(body.userId, body.token);
   }
+
+  @Post('update-pins')
+  async updatePins(
+    @Body() body: { userId: number; safePin: string; duressPin: string },
+  ) {
+    return this.authService.updatePins(
+      body.userId,
+      body.safePin,
+      body.duressPin,
+    );
+  }
 }

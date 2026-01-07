@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_background_service/flutter_background_service.dart'; // [MỚI]
+import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../../../../common/constants.dart';
 import '../../../../services/user_service.dart';
-import '../../../../services/auth_service.dart'; // [MỚI] Để logout
+import '../../../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import './profile/personal_info_screen.dart';
 import './security/verify_pin_screen.dart';
@@ -27,7 +27,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _isLoadingProfile = true;
   
   final UserService _userService = UserService();
-  final AuthService _authService = AuthService(); // [MỚI]
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -46,12 +46,10 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
-  // Kiểm tra trạng thái Quyền & Service chạy ngầm
   Future<void> _checkStatus() async {
     final gps = await Permission.location.isGranted;
     final notif = await Permission.notification.isGranted;
     
-    // Kiểm tra service có đang chạy không
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
 
@@ -59,12 +57,11 @@ class _SettingsTabState extends State<SettingsTab> {
       setState(() {
         _gpsTracking = gps;
         _notifications = notif;
-        _backgroundMode = isRunning; // Đồng bộ với thực tế
+        _backgroundMode = isRunning;
       });
     }
   }
 
-  // Logic bật tắt Chạy nền
   Future<void> _toggleBackgroundMode(bool value) async {
     final service = FlutterBackgroundService();
     if (value) {
@@ -103,7 +100,6 @@ class _SettingsTabState extends State<SettingsTab> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              // [MỚI] Xóa token lưu trong máy
               await _authService.logout(); 
               
               if (!mounted) return;
@@ -172,7 +168,6 @@ class _SettingsTabState extends State<SettingsTab> {
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.white70),
                   onPressed: () {
-                    // [ĐÃ SỬA] Truyền userId và reload data khi quay lại
                     Navigator.push(
                       context, 
                       MaterialPageRoute(builder: (context) => PersonalInfoScreen(userId: widget.userId))
@@ -219,7 +214,16 @@ class _SettingsTabState extends State<SettingsTab> {
                     subtitle: "Đổi PIN an toàn & PIN khẩn cấp",
                     showArrow: true,
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const VerifyPinScreen()));
+                      // [CODE CHUẨN] Truyền userId và userName
+                      Navigator.push(
+                        context, 
+                        MaterialPageRoute(
+                          builder: (context) => VerifyPinScreen(
+                            userId: widget.userId,
+                            userName: _userProfile?['fullName'] ?? "User",
+                          )
+                        )
+                      );
                     },
                   ),
                 ),
@@ -237,7 +241,6 @@ class _SettingsTabState extends State<SettingsTab> {
                         onChanged: (v) => _togglePermission(Permission.location),
                       ),
                       const Divider(height: 1, indent: 60),
-                      // [ĐÃ SỬA] Nút này giờ sẽ Bật/Tắt Service chạy ngầm
                       _buildSwitchTile(
                         icon: Icons.smartphone, iconColor: Colors.purple, bgColor: Colors.purple[50]!,
                         title: "Chạy nền", subtitle: "Cho phép theo dõi khi tắt màn hình",

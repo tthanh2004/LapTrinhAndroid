@@ -139,4 +139,20 @@ export class AuthService {
       data: { fcmToken: token },
     });
   }
+  async updatePins(userId: number, safePin: string, duressPin: string) {
+    // 1. Hash 2 mã PIN mới
+    const safePinHash = await this.hashData(safePin);
+    const duressPinHash = await this.hashData(duressPin);
+
+    // 2. Cập nhật vào DB
+    await this.prisma.user.update({
+      where: { userId: userId },
+      data: {
+        safePinHash: safePinHash,
+        duressPinHash: duressPinHash,
+      },
+    });
+
+    return { success: true, message: 'Đổi mã PIN thành công' };
+  }
 }

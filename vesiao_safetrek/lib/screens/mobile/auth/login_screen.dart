@@ -3,26 +3,29 @@ import 'package:vesiao_safetrek/screens/mobile/auth/utils/auth_colors.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/widgets/login_form.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/register_screen.dart';
 
-// [MỚI] Import Service và Màn hình chính
+// [MỚI] Import Service và màn hình xác thực PIN
 import '../../../../services/auth_service.dart';
-import '../mobile_screen.dart'; 
+import 'verify_pin_screen.dart'; // <--- Thêm import này
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // Trạng thái UI
   bool _isLoading = false;
   bool _isEmailMode = false;
+  bool _isButtonActive = false;
+  String? _identityError;
 
+  // Controllers
   final TextEditingController _identityController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  String? _identityError;
-  bool _isButtonActive = false;
 
-  // [MỚI] Khởi tạo AuthService
+  // Khởi tạo AuthService
   final AuthService _authService = AuthService();
 
   @override
@@ -48,14 +51,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  // [ĐÃ SỬA] Sử dụng AuthService để đăng nhập và lưu Token
+  // --- LOGIC ĐĂNG NHẬP (ĐÃ SỬA: Chuyển sang VerifyPinScreen) ---
   void _handleLogin() async {
     setState(() {
       _isLoading = true;
       _identityError = null;
     });
 
-    // Gọi AuthService (đã bao gồm gọi API + Lưu Token vào máy)
+    // 1. Gọi API đăng nhập
     final result = await _authService.login(
       _identityController.text.trim(),
       _passwordController.text,
@@ -63,26 +66,34 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
 
+    // 2. Xử lý kết quả
     if (result['success']) {
       final userId = result['data']['user']['userId'];
+      final userName = result['data']['user']['fullName']; // Lấy tên để hiển thị chào mừng
       
-      // Đăng nhập thành công -> Vào thẳng màn hình chính (MobileScreen)
-      // Thay vì vào VerifyPinScreen (thường chỉ dùng khi mở lại app đã đăng nhập)
-      Navigator.of(context).pushAndRemoveUntil(
+      // [THAY ĐỔI TẠI ĐÂY] 
+      // Đăng nhập thành công -> Chuyển sang màn hình nhập PIN
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => MobileScreen(userId: userId),
+          builder: (context) => VerifyPinScreen(
+            userId: userId,
+            userName: userName ?? "Người dùng",
+          ),
         ),
-        (route) => false, // Xóa hết lịch sử quay lại màn Login
       );
     } else {
-      // Đăng nhập thất bại
+      // Thất bại -> Hiện lỗi
       setState(() => _isLoading = false);
       _showError(result['message'] ?? "Đăng nhập thất bại");
     }
   }
 
   void _showError(String msg) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -90,6 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Stack(
         children: [
+          // Background Gradient
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -98,17 +110,26 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+          
+          // Nội dung chính
           SafeArea(
             child: Column(
               children: [
                 const SizedBox(height: 40),
                 const Icon(Icons.shield, color: Colors.white, size: 80),
-                const Text("SafeTrek", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                const Text(
+                  "SafeTrek", 
+                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)
+                ),
                 const SizedBox(height: 30),
+                
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+                    decoration: const BoxDecoration(
+                      color: Colors.white, 
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(30))
+                    ),
                     child: _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : LoginForm(
@@ -117,8 +138,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           passwordController: _passwordController,
                           identityError: _identityError,
                           isButtonActive: _isButtonActive,
-                          onSubmit: _handleLogin,
-                          onRegisterTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
+                          onSubmit: _handleLogin, 
+                          
+                          onRegisterTap: () => Navigator.push(
+                            context, 
+                            MaterialPageRoute(builder: (context) => const RegisterScreen())
+                          ),
+                          
                           onSwitchMode: (val) => setState(() {
                             _isEmailMode = val;
                             _identityController.clear();
