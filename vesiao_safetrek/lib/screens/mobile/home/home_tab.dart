@@ -27,7 +27,6 @@ class _HomeTabState extends State<HomeTab> {
   bool _isPressing = false;
   bool _isSending = false;
   
-  // [MỚI] Biến đếm số thông báo chưa đọc
   int _unreadCount = 0;
   Timer? _timer;
 
@@ -35,7 +34,6 @@ class _HomeTabState extends State<HomeTab> {
   void initState() {
     super.initState();
     _fetchUnreadCount();
-    // Tự động kiểm tra thông báo mới mỗi 10 giây
     _timer = Timer.periodic(const Duration(seconds: 10), (timer) => _fetchUnreadCount());
   }
 
@@ -45,7 +43,6 @@ class _HomeTabState extends State<HomeTab> {
     super.dispose();
   }
 
-  // Gọi API lấy số lượng chưa đọc
   Future<void> _fetchUnreadCount() async {
     try {
       final response = await http.get(
@@ -60,7 +57,6 @@ class _HomeTabState extends State<HomeTab> {
     } catch (_) {}
   }
 
-  // Hàm xử lý nút SOS (Giữ nguyên)
   Future<void> _handlePanicButton() async {
     setState(() { _showPanicAlert = true; _isSending = true; });
     try {
@@ -96,7 +92,7 @@ class _HomeTabState extends State<HomeTab> {
             child: SafeArea(
               child: Column(
                 children: [
-                  _buildHeader(), // Header chứa chuông thông báo
+                  _buildHeader(),
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -118,13 +114,13 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
+          // Modal cảnh báo SOS đồng bộ với TripTab
           if (_showPanicAlert) _buildPanicModal(),
         ],
       ),
     );
   }
 
-  // --- WIDGET HEADER (CÓ CHUÔNG + BADGE ĐỎ) ---
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -140,16 +136,12 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           const Spacer(),
-          
-          // Nút Chuông có Badge
           GestureDetector(
             onTap: () async {
-              // Chuyển sang màn hình thông báo và chờ quay lại
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => NotificationScreen(userId: widget.userId)),
               );
-              // Khi quay lại, cập nhật lại số lượng (về 0)
               _fetchUnreadCount();
             },
             child: Stack(
@@ -160,8 +152,6 @@ class _HomeTabState extends State<HomeTab> {
                   decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
                   child: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
                 ),
-                
-                // Hiển thị chấm đỏ nếu có tin chưa đọc
                 if (_unreadCount > 0)
                   Positioned(
                     right: 0, top: 0,
@@ -184,7 +174,6 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // ... (Các widget phụ giữ nguyên)
   Widget _buildStatusCard() {
     return Container(
       width: double.infinity, padding: const EdgeInsets.all(24),
@@ -205,6 +194,98 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildInfoTextBox() { return Container(padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: const Color(0xFF7F1D1D).withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFF87171).withOpacity(0.3))), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [Icon(Icons.info_outline, size: 16, color: Colors.white70), SizedBox(width: 8), Expanded(child: Text("Nút SOS sẽ gửi cảnh báo khẩn cấp ngay lập tức đến tất cả danh bạ khẩn cấp của bạn.", style: TextStyle(color: Colors.white70, fontSize: 13)))])); }
   
   Widget _buildActionButton({required IconData icon, required String text, required VoidCallback onTap}) { return Material(color: Colors.white, borderRadius: BorderRadius.circular(12), elevation: 2, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(12), child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: const Color(0xFF1D4ED8), size: 20), const SizedBox(width: 8), Text(text, style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 15, fontWeight: FontWeight.w600))])))); }
-  
-  Widget _buildPanicModal() { return Container(color: Colors.black.withOpacity(0.8), alignment: Alignment.center, child: Container(margin: const EdgeInsets.all(24), padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)), child: Column(mainAxisSize: MainAxisSize.min, children: [ _isSending ? const CircularProgressIndicator(color: Colors.red) : const Icon(Icons.check_circle, color: Colors.green, size: 60), const SizedBox(height: 20), Text(_isSending ? "ĐANG GỬI CỨU HỘ..." : "ĐÃ GỬI CẢNH BÁO SOS!", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 16), const Text("Vị trí GPS và thông tin của bạn đã được gửi tới người thân.", textAlign: TextAlign.center)]))); }
+
+  // --- WIDGET MODAL PANIC (ĐÃ FIX THEO FIGMA image_a2d128.png) ---
+  Widget _buildPanicModal() {
+    return Container(
+      color: Colors.black.withOpacity(0.6),
+      alignment: Alignment.center,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.85,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Nút X đóng ở góc phải
+            Align(
+              alignment: Alignment.topRight,
+              child: GestureDetector(
+                onTap: () => setState(() => _showPanicAlert = false),
+                child: const Icon(Icons.close, color: Colors.black54, size: 24),
+              ),
+            ),
+            
+            // Icon cảnh báo đỏ trong vòng tròn hồng nhạt
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                shape: BoxShape.circle,
+              ),
+              child: _isSending 
+                  ? const CircularProgressIndicator(color: Colors.red)
+                  : const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 60),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Tiêu đề thông báo
+            Text(
+              _isSending ? "ĐANG GỬI CỨU HỘ..." : "Cảnh báo SOS đã được gửi!",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Danh sách các dòng thông tin có chấm tròn đỏ chuẩn Figma
+            if (!_isSending)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    _buildPanicInfoRow("Cảnh báo khẩn cấp"),
+                    _buildPanicInfoRow("Vị trí GPS"),
+                    _buildPanicInfoRow("Mức pin điện thoại"),
+                    _buildPanicInfoRow("Thời gian cảnh báo"),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget phụ tạo dòng thông tin có bullet point đỏ
+  Widget _buildPanicInfoRow(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Icon(Icons.circle, color: Colors.red, size: 8),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

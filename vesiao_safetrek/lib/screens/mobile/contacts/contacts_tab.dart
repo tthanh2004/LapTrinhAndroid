@@ -414,26 +414,97 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
+  // --- MODAL XÁC NHẬN XÓA CHUẨN FIGMA (image_a51a68.png) ---
   void _showDeleteConfirmDialog(int id) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Xóa người bảo vệ?"),
-        content: const Text("Người này sẽ không còn nhận được cảnh báo SOS của bạn nữa."),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon thùng rác đỏ trong vòng tròn xanh nhạt
+              Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEFF6FF), // Blue 50
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.delete, color: Color(0xFFEF4444), size: 30),
+              ),
+              const SizedBox(height: 20),
+              
+              // Tiêu đề
+              const Text(
+                "Xóa người bảo vệ?",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B), // Slate 900
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              
+              // Nội dung căn giữa
+              const Text(
+                "Bạn có muốn xóa người bảo vệ này không?",
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Color(0xFF64748B), // Slate 500
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              
+              // Hàng nút bấm
+              Row(
+                children: [
+                  // Nút "Không" màu nhạt
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFF7ED), // Orange 50 (nhạt gần như trắng)
+                          foregroundColor: const Color(0xFF475569), // Slate 600
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text("Không", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Nút "Có" màu đỏ chuẩn
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _performDelete(id);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEF4444), // Red 500
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text("Có", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _performDelete(id);
-            },
-            child: const Text("Xóa", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
+        ),
       ),
     );
   }

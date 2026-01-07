@@ -123,57 +123,40 @@ class _SettingsTabState extends State<SettingsTab> {
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
+            padding: const EdgeInsets.fromLTRB(24, 60, 24, 30), // Tăng nhẹ padding bottom cho thoáng
             decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+              color: Color(0xFF2563EB), // Sử dụng màu phẳng (Solid) theo Figma image_a50fa0.png
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: Colors.white,
-                  backgroundImage: _userProfile?['avatarUrl'] != null 
-                      ? NetworkImage(_userProfile!['avatarUrl']) 
-                      : null,
-                  child: _userProfile?['avatarUrl'] == null
-                      ? Text(
-                          _userProfile != null && _userProfile!['fullName'] != null 
-                              ? _userProfile!['fullName'][0].toUpperCase() 
-                              : "?",
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kPrimaryColor),
-                        )
-                      : null,
-                ),
+                // Icon Cài đặt to ở bên trái (Dựa theo ảnh thiết kế cài đặt)
+                const Icon(Icons.settings, color: Colors.white, size: 40),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _isLoadingProfile 
-                          ? const SizedBox(width: 100, height: 20, child: LinearProgressIndicator(color: Colors.white30))
-                          : Text(
-                              _userProfile?['fullName'] ?? "Người dùng",
-                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      const Text(
+                        "Cài đặt",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
-                        _userProfile?['phoneNumber'] ?? "Đang tải...",
-                        style: TextStyle(color: Colors.blue[100], fontSize: 14),
+                        "Tùy chỉnh ứng dụng",
+                        style: TextStyle(
+                          color: Colors.blue[100],
+                          fontSize: 16,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white70),
-                  onPressed: () {
-                    Navigator.push(
-                      context, 
-                      MaterialPageRoute(builder: (context) => PersonalInfoScreen(userId: widget.userId))
-                    ).then((_) => _loadUserData());
-                  },
-                )
+                // Đã xóa phần CircleAvatar và IconButton (hình bút chì)
               ],
             ),
           ),
