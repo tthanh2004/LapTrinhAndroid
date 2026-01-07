@@ -17,9 +17,12 @@ class TripTab extends StatefulWidget {
 class _TripTabState extends State<TripTab> {
   final TextEditingController _destController = TextEditingController();
 
-  // State cho hiệu ứng SOS
+  // State quản lý hiển thị Modal SOS
   bool _showPanicAlert = false;
   bool _isSending = false;
+
+  // [MỚI THÊM] Biến để theo dõi số lần nhập sai PIN
+  int _failedAttempts = 0;
 
   @override
   void dispose() {
@@ -27,27 +30,28 @@ class _TripTabState extends State<TripTab> {
     super.dispose();
   }
 
-  // Hàm xử lý nút Panic (Đồng bộ logic hiển thị Modal giống HomeTab)
+  // --- HÀM XỬ LÝ NÚT HOẢNG LOẠN (ĐÃ CẬP NHẬT THEO YÊU CẦU) ---
   Future<void> _handlePanicButton() async {
-    // 1. Hiển thị Modal trạng thái đang gửi
+    // 1. Hiển thị Modal trạng thái đang gửi đè lên màn hình
     setState(() {
       _showPanicAlert = true;
       _isSending = true;
     });
 
     try {
-      // 2. Gọi Controller để xử lý API (Controller đã lấy GPS thật)
       final controller = Provider.of<TripController>(context, listen: false);
+      
+      // 2. Gửi tín hiệu khẩn cấp GPS thật lên server
       await controller.triggerPanic(widget.userId);
-    } catch (_) {
-      // Xử lý lỗi nếu cần
-    } finally {
-      // 3. Cập nhật trạng thái đã gửi xong
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
 
-      // 4. Đợi 4 giây rồi tự tắt Modal
+      // 3. THOÁT TRẠNG THÁI GIÁM SÁT NGAY LẬP TỨC
+      controller.stopTrip(isSafe: false);
+
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+
+      // 4. Đợi 4 giây hiển thị thông báo rồi đóng Modal
       Timer(const Duration(seconds: 4), () {
         if (mounted) {
           setState(() {
@@ -60,11 +64,9 @@ class _TripTabState extends State<TripTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Dùng Stack để đè Modal lên trên giao diện chính
     return Scaffold(
       body: Stack(
         children: [
-          // Lớp dưới: Giao diện chính (Consumer)
           Consumer<TripController>(
             builder: (context, controller, child) {
               return controller.isMonitoring
@@ -72,15 +74,13 @@ class _TripTabState extends State<TripTab> {
                   : _buildSetupView(context, controller);
             },
           ),
-
-          // Lớp trên: Modal cảnh báo (Chỉ hiện khi _showPanicAlert = true)
           if (_showPanicAlert) _buildPanicModal(),
         ],
       ),
     );
   }
 
-  // --- VIEW 1: CÀI ĐẶT ---
+  // --- VIEW 1: CÀI ĐẶT (GIỮ NGUYÊN GIAO DIỆN CỦA BẠN) ---
   Widget _buildSetupView(BuildContext context, TripController controller) {
     return Column(
       children: [
@@ -179,6 +179,7 @@ class _TripTabState extends State<TripTab> {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
+                      _failedAttempts = 0; // Reset số lần sai khi bắt đầu chuyến mới
                       controller.startTrip(
                         userId: widget.userId,
                         destinationName: _destController.text.isEmpty
@@ -224,7 +225,7 @@ class _TripTabState extends State<TripTab> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: _handlePanicButton, // Gọi hàm mới
+                    onPressed: _handlePanicButton,
                     icon: const Icon(Icons.warning_amber_rounded, size: 24),
                     label: const Text("NÚT HOẢNG LOẠN",
                         style: TextStyle(
@@ -245,7 +246,7 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- VIEW 2: ĐANG GIÁM SÁT ---
+  // --- VIEW 2: ĐANG GIÁM SÁT (GIỮ NGUYÊN GIAO DIỆN CỦA BẠN) ---
   Widget _buildActiveView(BuildContext context, TripController controller) {
     return Column(
       children: [
@@ -337,7 +338,7 @@ class _TripTabState extends State<TripTab> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: _handlePanicButton, // Gọi hàm mới
+                    onPressed: _handlePanicButton,
                     icon: const Icon(Icons.error_outline, size: 24),
                     label: const Text("NÚT HOẢNG LOẠN",
                         style: TextStyle(
@@ -359,7 +360,7 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- WIDGET HEADER ---
+  // --- CÁC WIDGET GIAO DIỆN PHỤ (GIỮ NGUYÊN) ---
   Widget _buildHeader(
       {required String title,
       required String subtitle,
@@ -420,7 +421,6 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- WIDGET MODAL PANIC ---
   Widget _buildPanicModal() {
     return Container(
       color: Colors.black.withOpacity(0.8),
@@ -454,6 +454,7 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
+  // --- LOGIC XÁC THỰC MÃ PIN (CẬP NHẬT CHỨC NĂNG SAI 5 LẦN) ---
   void _openPinPad(BuildContext context, TripController controller) {
     showModalBottomSheet(
       context: context,
@@ -461,53 +462,49 @@ class _TripTabState extends State<TripTab> {
       backgroundColor: Colors.transparent,
       builder: (_) => PinPad(
         onPinSubmit: (String inputPin) async {
-          // Gọi API kiểm tra PIN
           String status = await controller.verifyPin(widget.userId, inputPin);
 
           if (!mounted) return;
 
           if (status == 'SAFE') {
-            // TRƯỜNG HỢP 1: AN TOÀN
-            Navigator.pop(context); // Đóng PinPad
+            Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                 content: Text("✅ Đã xác nhận an toàn!"),
                 backgroundColor: Colors.green));
-            
-            // Kết thúc chuyến đi trạng thái SAFE
             controller.stopTrip(isSafe: true);
-            
           } else if (status == 'DURESS') {
-            // TRƯỜNG HỢP 2: BỊ CƯỠNG ÉP (CẢNH BÁO NGẦM)
-            Navigator.pop(context); // Đóng PinPad ngay lập tức
-
-            // [QUAN TRỌNG] Đồng bộ với SOS: Gửi ngay vị trí GPS + Alert
-            // Gọi hàm triggerPanic giống hệt nút SOS nhưng chạy ngầm
-            await controller.triggerPanic(widget.userId);
-
-            // Kết thúc chuyến đi trạng thái DURESS
-            controller.stopTrip(isSafe: false);
-
-            // Hiển thị thông báo (Giả vờ như đã tắt thành công hoặc báo nhẹ)
-            // Lưu ý: Thực tế nên hiện "Đã kết thúc chuyến đi" để lừa kẻ xấu, 
-            // nhưng ở đây mình để thông báo rõ để bạn test.
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text("⚠️ Cảnh báo ngầm & Vị trí đã được gửi!"),
-                backgroundColor: Colors.orange));
-                
-          } else {
-            // TRƯỜNG HỢP 3: SAI MÃ
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(status == 'INVALID'
-                    ? "❌ Mã PIN không đúng!"
-                    : "Lỗi kết nối Server"),
-                backgroundColor: Colors.red));
-            
-            // Mở lại PinPad để nhập lại
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted && controller.isMonitoring)
-                _openPinPad(context, controller);
-            });
+            await controller.triggerPanic(widget.userId);
+            controller.stopTrip(isSafe: false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("⚠️ Cảnh báo ngầm đã được gửi!"),
+                backgroundColor: Colors.orange));
+          } else {
+            // [CẬP NHẬT] Xử lý khi nhập sai PIN
+            _failedAttempts++;
+            Navigator.pop(context);
+
+            if (_failedAttempts >= 5) {
+              // Gửi cảnh báo ngầm thật sự lên hệ thống
+              await controller.triggerPanic(widget.userId);
+              controller.stopTrip(isSafe: false);
+              
+              // Nhưng hiển thị thông báo "giả" là an toàn để bảo vệ người dùng
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text("✅ Đã xác nhận an toàn!"),
+                  backgroundColor: Colors.green));
+            } else {
+              // Thông báo sai mã PIN bình thường
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("❌ Mã PIN không đúng! (Lần ${_failedAttempts}/5)"),
+                  backgroundColor: Colors.red));
+              
+              // Mở lại PinPad sau 0.5s để người dùng nhập lại (nếu chưa đủ 5 lần)
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && controller.isMonitoring)
+                  _openPinPad(context, controller);
+              });
+            }
           }
         },
       ),
