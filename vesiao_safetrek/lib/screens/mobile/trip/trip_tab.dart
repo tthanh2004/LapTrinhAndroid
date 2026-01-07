@@ -461,29 +461,49 @@ class _TripTabState extends State<TripTab> {
       backgroundColor: Colors.transparent,
       builder: (_) => PinPad(
         onPinSubmit: (String inputPin) async {
+          // Gọi API kiểm tra PIN
           String status = await controller.verifyPin(widget.userId, inputPin);
 
           if (!mounted) return;
 
           if (status == 'SAFE') {
-            Navigator.pop(context);
+            // TRƯỜNG HỢP 1: AN TOÀN
+            Navigator.pop(context); // Đóng PinPad
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                 content: Text("✅ Đã xác nhận an toàn!"),
                 backgroundColor: Colors.green));
+            
+            // Kết thúc chuyến đi trạng thái SAFE
             controller.stopTrip(isSafe: true);
+            
           } else if (status == 'DURESS') {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text("⚠️ Cảnh báo ngầm đã được gửi!"),
-                backgroundColor: Colors.orange));
+            // TRƯỜNG HỢP 2: BỊ CƯỠNG ÉP (CẢNH BÁO NGẦM)
+            Navigator.pop(context); // Đóng PinPad ngay lập tức
+
+            // [QUAN TRỌNG] Đồng bộ với SOS: Gửi ngay vị trí GPS + Alert
+            // Gọi hàm triggerPanic giống hệt nút SOS nhưng chạy ngầm
+            await controller.triggerPanic(widget.userId);
+
+            // Kết thúc chuyến đi trạng thái DURESS
             controller.stopTrip(isSafe: false);
+
+            // Hiển thị thông báo (Giả vờ như đã tắt thành công hoặc báo nhẹ)
+            // Lưu ý: Thực tế nên hiện "Đã kết thúc chuyến đi" để lừa kẻ xấu, 
+            // nhưng ở đây mình để thông báo rõ để bạn test.
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text("⚠️ Cảnh báo ngầm & Vị trí đã được gửi!"),
+                backgroundColor: Colors.orange));
+                
           } else {
+            // TRƯỜNG HỢP 3: SAI MÃ
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(status == 'INVALID'
                     ? "❌ Mã PIN không đúng!"
                     : "Lỗi kết nối Server"),
                 backgroundColor: Colors.red));
+            
+            // Mở lại PinPad để nhập lại
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted && controller.isMonitoring)
                 _openPinPad(context, controller);

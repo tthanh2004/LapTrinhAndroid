@@ -60,4 +60,12 @@ export class AuthController {
       body.duressPin,
     );
   }
+
+  @Patch('profile/:id')
+  async updateProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { fullName?: string; email?: string },
+  ) {
+    return this.authService.updateProfile(id, body);
+  }
 }

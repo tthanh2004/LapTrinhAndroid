@@ -155,4 +155,41 @@ export class AuthService {
 
     return { success: true, message: 'Đổi mã PIN thành công' };
   }
+
+  async updateProfile(
+    userId: number,
+    data: { fullName?: string; email?: string },
+  ) {
+    // 1. Kiểm tra user tồn tại
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (!user) throw new NotFoundException('Người dùng không tồn tại');
+
+    // 2. Nếu có cập nhật email, kiểm tra xem email mới có bị trùng với người khác không
+    if (data.email && data.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (emailExists) {
+        throw new BadRequestException('Email này đã được người khác sử dụng.');
+      }
+    }
+
+    // 3. Tiến hành cập nhật
+    const updatedUser = await this.prisma.user.update({
+      where: { userId },
+      data: {
+        fullName: data.fullName,
+        email: data.email,
+      },
+    });
+
+    return {
+      message: 'Cập nhật thành công',
+      user: {
+        userId: updatedUser.userId,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+      },
+    };
+  }
 }
