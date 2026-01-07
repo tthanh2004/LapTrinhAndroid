@@ -1,11 +1,11 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:vesiao_safetrek/common/constants.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/utils/auth_colors.dart';
 import 'package:vesiao_safetrek/screens/mobile/auth/widgets/login_form.dart';
-import 'package:vesiao_safetrek/screens/mobile/auth/verify_pin_screen.dart'; // Màn xác thực PIN
 import 'package:vesiao_safetrek/screens/mobile/auth/register_screen.dart';
+
+// [MỚI] Import Service và Màn hình chính
+import '../../../../services/auth_service.dart';
+import '../mobile_screen.dart'; 
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,6 +21,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   String? _identityError;
   bool _isButtonActive = false;
+
+  // [MỚI] Khởi tạo AuthService
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -45,40 +48,36 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  // [ĐÃ SỬA] Sử dụng AuthService để đăng nhập và lưu Token
   void _handleLogin() async {
     setState(() {
       _isLoading = true;
       _identityError = null;
     });
 
-    try {
-      final response = await http.post(
-        Uri.parse('${Constants.baseUrl}/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'identity': _identityController.text.trim(),
-          'password': _passwordController.text,
-        }),
-      );
+    // Gọi AuthService (đã bao gồm gọi API + Lưu Token vào máy)
+    final result = await _authService.login(
+      _identityController.text.trim(),
+      _passwordController.text,
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        // ĐĂNG NHẬP THÀNH CÔNG -> CHUYỂN QUA NHẬP PIN
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => VerifyPinScreen(
-              userId: data['user']['userId'],
-              userName: data['user']['fullName'] ?? "User",
-            ),
-          ),
-        );
-      } else {
-        _showError(jsonDecode(response.body)['message'] ?? "Đăng nhập thất bại");
-      }
-    } catch (e) {
-      _showError("Lỗi kết nối: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    if (!mounted) return;
+
+    if (result['success']) {
+      final userId = result['data']['user']['userId'];
+      
+      // Đăng nhập thành công -> Vào thẳng màn hình chính (MobileScreen)
+      // Thay vì vào VerifyPinScreen (thường chỉ dùng khi mở lại app đã đăng nhập)
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => MobileScreen(userId: userId),
+        ),
+        (route) => false, // Xóa hết lịch sử quay lại màn Login
+      );
+    } else {
+      // Đăng nhập thất bại
+      setState(() => _isLoading = false);
+      _showError(result['message'] ?? "Đăng nhập thất bại");
     }
   }
 

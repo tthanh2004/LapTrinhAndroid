@@ -45,6 +45,8 @@ dependencies:
   firebase_messaging: ^16.1.0
   permission_handler: ^11.3.0  # Xin quyền
   shared_preferences: ^2.2.2   # Lưu userId
+  flutter_background_service: ^5.0.0
+  flutter_local_notifications: ^17.0.0
 
 dev_dependencies:
   flutter_test:

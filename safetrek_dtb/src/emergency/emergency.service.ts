@@ -255,4 +255,14 @@ export class EmergencyService {
       console.log('FCM Multicast Error', e);
     }
   }
+  async sendManualNotification(userId: number, title: string, body: string) {
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (user?.fcmToken) {
+      await this._sendPushToToken(user.fcmToken, title, body, {
+        type: 'NORMAL_MESSAGE',
+      });
+      return { success: true };
+    }
+    return { success: false, message: 'User has no token' };
+  }
 }
