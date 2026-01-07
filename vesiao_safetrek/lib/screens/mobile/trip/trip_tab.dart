@@ -17,7 +17,7 @@ class TripTab extends StatefulWidget {
 class _TripTabState extends State<TripTab> {
   final TextEditingController _destController = TextEditingController();
 
-  // [MỚI] State cho hiệu ứng SOS giống HomeTab
+  // State cho hiệu ứng SOS
   bool _showPanicAlert = false;
   bool _isSending = false;
 
@@ -27,7 +27,7 @@ class _TripTabState extends State<TripTab> {
     super.dispose();
   }
 
-  // [MỚI] Hàm xử lý nút Panic (Đồng bộ logic với HomeTab)
+  // Hàm xử lý nút Panic (Đồng bộ logic hiển thị Modal giống HomeTab)
   Future<void> _handlePanicButton() async {
     // 1. Hiển thị Modal trạng thái đang gửi
     setState(() {
@@ -36,7 +36,7 @@ class _TripTabState extends State<TripTab> {
     });
 
     try {
-      // 2. Gọi Controller để xử lý API (Controller tự lo phần Location và API)
+      // 2. Gọi Controller để xử lý API (Controller đã lấy GPS thật)
       final controller = Provider.of<TripController>(context, listen: false);
       await controller.triggerPanic(widget.userId);
     } catch (_) {
@@ -60,7 +60,7 @@ class _TripTabState extends State<TripTab> {
 
   @override
   Widget build(BuildContext context) {
-    // [MỚI] Dùng Stack để đè Modal lên trên giao diện chính
+    // Dùng Stack để đè Modal lên trên giao diện chính
     return Scaffold(
       body: Stack(
         children: [
@@ -224,8 +224,7 @@ class _TripTabState extends State<TripTab> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
-                    // [UPDATE] Gọi hàm _handlePanicButton mới
-                    onPressed: _handlePanicButton,
+                    onPressed: _handlePanicButton, // Gọi hàm mới
                     icon: const Icon(Icons.warning_amber_rounded, size: 24),
                     label: const Text("NÚT HOẢNG LOẠN",
                         style: TextStyle(
@@ -338,8 +337,7 @@ class _TripTabState extends State<TripTab> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
-                    // [UPDATE] Gọi hàm _handlePanicButton mới
-                    onPressed: _handlePanicButton,
+                    onPressed: _handlePanicButton, // Gọi hàm mới
                     icon: const Icon(Icons.error_outline, size: 24),
                     label: const Text("NÚT HOẢNG LOẠN",
                         style: TextStyle(
@@ -422,7 +420,7 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- [MỚI] WIDGET MODAL PANIC (COPY TỪ HOME TAB) ---
+  // --- WIDGET MODAL PANIC ---
   Widget _buildPanicModal() {
     return Container(
       color: Colors.black.withOpacity(0.8),

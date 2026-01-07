@@ -2,23 +2,23 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../common/constants.dart'; // Đảm bảo import đúng file chứa Constants
+import 'package:geolocator/geolocator.dart'; // [QUAN TRỌNG] Thêm import này
+import '../common/constants.dart';
 
 class TripController extends ChangeNotifier {
-  // --- 1. TRẠNG THÁI UI & TIMER ---
+  // --- 1. STATE UI ---
   bool isMonitoring = false;
   int selectedMinutes = 15;
   int _remainingSeconds = 0;
   Timer? _timer;
   double progress = 1.0;
   String formattedTime = "15:00";
-  
-  // Lưu trữ ID chuyến đi và User ID hiện tại
   int? currentTripId; 
   
-  // Lấy Base URL từ Constants (giống AuthController)
+  // URL API
   final String baseUrl = Constants.baseUrl;
 
+  // Cập nhật thời gian chọn
   void setDuration(int minutes) {
     if (!isMonitoring) {
       selectedMinutes = minutes;
@@ -27,18 +27,17 @@ class TripController extends ChangeNotifier {
     }
   }
 
-  // --- 2. CÁC HÀM GỌI API (SERVER) ---
+  // --- 2. CÁC HÀM API ---
 
   // [API] Bắt đầu chuyến đi
   Future<bool> startTrip({required int userId, String? destinationName}) async {
-    // 1. Cập nhật UI trước để app phản hồi nhanh
+    // Cập nhật UI ngay lập tức
     isMonitoring = true;
     _remainingSeconds = selectedMinutes * 60;
     progress = 1.0;
     notifyListeners();
     _startTimer();
 
-    // 2. Gọi API
     try {
       final url = Uri.parse('$baseUrl/trips/start');
       final response = await http.post(
@@ -53,60 +52,66 @@ class TripController extends ChangeNotifier {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        currentTripId = data['tripId']; // Lưu ID chuyến đi để dùng cho Stop/Panic
-        print("✅ Trip Started: ID $currentTripId");
+        currentTripId = data['tripId']; 
+        print("✅ Trip started: ID $currentTripId");
         return true;
-      } else {
-        print("❌ Server Error (Start Trip): ${response.body}");
-        return false;
       }
+      return false;
     } catch (e) {
-      print("❌ Connection Error (Start Trip): $e");
+      print("❌ Error starting trip: $e");
       return false;
     }
   }
 
-  // [API] Kết thúc chuyến đi (An toàn hoặc Cưỡng ép)
+  // [API] Kết thúc chuyến đi
   Future<void> stopTrip({required bool isSafe}) async {
-    // 1. Dừng Timer UI
     isMonitoring = false;
     _timer?.cancel();
     notifyListeners();
 
-    if (currentTripId == null) {
-      print("⚠️ No Active Trip ID to stop.");
-      return;
-    }
+    if (currentTripId == null) return;
 
-    // 2. Gọi API
     try {
-      final url = Uri.parse('$baseUrl/trips/$currentTripId/end');
-      final response = await http.patch(
-        url,
+      await http.patch(
+        Uri.parse('$baseUrl/trips/$currentTripId/end'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "status": isSafe ? "COMPLETED_SAFE" : "DURESS_ENDED"
         }),
       );
-
-      if (response.statusCode == 200) {
-        print("✅ Trip Ended: ${isSafe ? 'Safe' : 'Duress'}");
-      } else {
-        print("❌ Server Error (Stop Trip): ${response.body}");
-      }
     } catch (e) {
-      print("❌ Connection Error (Stop Trip): $e");
+      print("Error stop trip: $e");
     }
   }
 
-  // [API] Kích hoạt Khẩn cấp (Panic)
+  // [API] Trigger Panic (Đã cập nhật lấy GPS thật)
   Future<void> triggerPanic(int userId) async {
     print("🚨 Triggering Panic...");
     
-    // Tọa độ giả lập (Thực tế nên dùng Geolocator để lấy vị trí thật)
-    double lat = 21.0285;
-    double lng = 105.8542;
+    double lat = 0.0;
+    double lng = 0.0;
 
+    // 1. Lấy vị trí thực tế
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      
+      // Lấy tọa độ hiện tại (High accuracy)
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+      lat = position.latitude;
+      lng = position.longitude;
+      print("📍 Current Location: $lat, $lng");
+
+    } catch (e) {
+      print("⚠️ Không lấy được GPS: $e");
+      // Fallback: Nếu không lấy được GPS, gửi 0.0 hoặc xử lý tùy ý
+    }
+
+    // 2. Gọi API gửi tọa độ thật
     try {
       final url = Uri.parse('$baseUrl/emergency/panic');
       final response = await http.post(
@@ -114,14 +119,14 @@ class TripController extends ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "userId": userId,
-          "lat": lat,
-          "lng": lng,
-          "tripId": currentTripId // Gửi kèm nếu đang trong chuyến đi
+          "lat": lat, 
+          "lng": lng, 
+          "tripId": currentTripId // Gửi kèm TripID để server biết user đang đi
         }),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print("✅ Panic Sent Successfully: ${response.body}");
+        print("✅ Panic Sent Successfully");
       } else {
         print("❌ Panic Failed: ${response.body}");
       }
@@ -130,57 +135,40 @@ class TripController extends ChangeNotifier {
     }
   }
 
-  // [API] Xác thực mã PIN
-  // Trả về String: "SAFE", "DURESS", hoặc "INVALID"/"ERROR"
+  // [API] Verify PIN
   Future<String> verifyPin(int userId, String pin) async {
     try {
-      final url = Uri.parse('$baseUrl/trips/verify-pin');
       final response = await http.post(
-        url,
+        Uri.parse('$baseUrl/trips/verify-pin'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "userId": userId,
-          "pin": pin
-        }),
+        body: jsonEncode({"userId": userId, "pin": pin}),
       );
-
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        // Server trả về: { "status": "SAFE" } hoặc { "status": "DURESS" }
         return data['status'] ?? "INVALID";
-      } else {
-        print("❌ Verify PIN Failed: ${response.body}");
-        return "INVALID";
       }
+      return "INVALID";
     } catch (e) {
-      print("❌ Connection Error (Verify PIN): $e");
       return "ERROR";
     }
   }
 
-  // --- 3. LOGIC NỘI BỘ ---
-
+  // --- 3. LOGIC TIMER ---
   void _startTimer() {
-    _timer?.cancel(); // Hủy timer cũ nếu có
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
         _remainingSeconds--;
-        
-        // Tính toán progress bar
         double totalSeconds = selectedMinutes * 60.0;
         progress = _remainingSeconds / totalSeconds;
-
-        // Format thời gian hiển thị (MM:SS)
         int min = _remainingSeconds ~/ 60;
         int sec = _remainingSeconds % 60;
         formattedTime = "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
-        
         notifyListeners();
       } else {
         _timer?.cancel();
-        // Hết giờ -> Logic tự động (ví dụ: Tự động gọi Panic)
-        // triggerPanic(userId); // Cần userId để gọi cái này
-        print("⚠️ Timer finished - Should trigger Auto Panic here");
+        // Hết giờ -> Logic tự động Panic nếu cần
+        // if (currentTripId != null) triggerPanic(userId); 
       }
     });
   }
