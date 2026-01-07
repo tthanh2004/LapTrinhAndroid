@@ -9,7 +9,10 @@ import 'package:geolocator/geolocator.dart';
 
 Future<void> initializeBackgroundService() async {
   // [QUAN TRỌNG] Chặn code này chạy trên Web
-  if (kIsWeb) return;
+  if (kIsWeb) {
+    print("⚠️ Đang chạy trên Web: Bỏ qua FlutterBackgroundService");
+    return; 
+  }
 
   final service = FlutterBackgroundService();
 

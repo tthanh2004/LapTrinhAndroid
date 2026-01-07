@@ -6,7 +6,9 @@ import '../../../controllers/trip_controller.dart';
 import '../../../widgets/pin_pad.dart';
 
 class TripTab extends StatefulWidget {
-  const TripTab({super.key});
+  final int userId; // [MỚI] Nhận UserID
+
+  const TripTab({super.key, required this.userId}); // [MỚI] Update Constructor
 
   @override
   State<TripTab> createState() => _TripTabState();
@@ -21,7 +23,15 @@ class _TripTabState extends State<TripTab> {
     super.dispose();
   }
 
-  void _showPanicAlert(BuildContext context) {
+  // Hàm xử lý nút Panic
+  void _showPanicAlert(BuildContext context) async {
+    // 1. Gọi API gửi báo động ngay lập tức
+    final controller = Provider.of<TripController>(context, listen: false);
+    await controller.triggerPanic(widget.userId); 
+
+    if (!mounted) return;
+
+    // 2. Hiện thông báo UI
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -41,15 +51,17 @@ class _TripTabState extends State<TripTab> {
               const Text("Cảnh báo đã được gửi!", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
               const SizedBox(height: 8),
               const Text("Danh bạ khẩn cấp của bạn đã nhận được thông báo và vị trí của bạn", style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor, foregroundColor: Colors.white),
+                child: const Text("Đóng"),
+              )
             ],
           ),
         ),
       ),
     );
-
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-    });
   }
 
   @override
@@ -63,42 +75,17 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- VIEW 1: CÀI ĐẶT (ĐÃ FIX LAYOUT) ---
+  // --- VIEW 1: CÀI ĐẶT ---
   Widget _buildSetupView(BuildContext context, TripController controller) {
     return Column(
       children: [
-        // 1. Header cố định
-        Container(
-          padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [kPrimaryColor, Color(0xFF1D4ED8)],
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.shield, color: Colors.white, size: 40),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text("Cài đặt chuyến đi", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text("Thiết lập giám sát an toàn", style: TextStyle(color: Colors.white70, fontSize: 14)),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // 2. Nội dung cuộn được (Thay ListView bằng SingleChildScrollView để tránh lỗi xung đột)
+        _buildHeader(title: "Cài đặt chuyến đi", subtitle: "Thiết lập giám sát an toàn", icon: Icons.shield),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Info Box
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(color: kPrimaryLight, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue.shade200)),
@@ -113,7 +100,6 @@ class _TripTabState extends State<TripTab> {
                 ),
                 const SizedBox(height: 24),
 
-                // Input Điểm đến
                 const Text("Điểm đến (Tùy chọn)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
                 const SizedBox(height: 8),
                 TextField(
@@ -127,7 +113,6 @@ class _TripTabState extends State<TripTab> {
                 ),
                 const SizedBox(height: 16),
 
-                // Input Thời gian
                 const Text("Thời gian dự kiến (phút)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
                 const SizedBox(height: 8),
                 TextField(
@@ -141,7 +126,6 @@ class _TripTabState extends State<TripTab> {
                 ),
                 const SizedBox(height: 16),
 
-                // Chọn nhanh
                 const Text("Chọn nhanh:", style: TextStyle(color: kSubTextColor, fontSize: 14)),
                 const SizedBox(height: 8),
                 Wrap(
@@ -161,11 +145,16 @@ class _TripTabState extends State<TripTab> {
                 ),
                 const SizedBox(height: 24),
 
-                // Nút Bắt đầu
+                // NÚT BẮT ĐẦU (ĐÃ SỬA)
                 SizedBox(
                   width: double.infinity, height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: () => controller.startTrip(_destController.text.isEmpty ? null : _destController.text),
+                    onPressed: () {
+                      controller.startTrip(
+                        userId: widget.userId, // Truyền userId vào
+                        destinationName: _destController.text.isEmpty ? null : _destController.text,
+                      );
+                    },
                     icon: const Icon(Icons.shield, size: 20),
                     label: const Text("Bắt đầu giám sát", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -176,7 +165,7 @@ class _TripTabState extends State<TripTab> {
                 const Divider(),
                 const SizedBox(height: 24),
 
-                // Nút Panic
+                // NÚT PANIC
                 Container(
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -207,13 +196,13 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- VIEW 2: ĐANG GIÁM SÁT (GIỮ NGUYÊN) ---
+  // --- VIEW 2: ĐANG GIÁM SÁT ---
   Widget _buildActiveView(BuildContext context, TripController controller) {
     return Column(
       children: [
         _buildHeader(
           title: "Đang giám sát", 
-          subtitle: "Phú Thọ", 
+          subtitle: _destController.text.isNotEmpty ? _destController.text : "Đang di chuyển", 
           icon: Icons.shield_outlined,
           showAvatar: true
         ),
@@ -231,7 +220,7 @@ class _TripTabState extends State<TripTab> {
                     SizedBox(
                       width: 260, height: 260,
                       child: CircularProgressIndicator(
-                        value: 0.75, 
+                        value: controller.progress, 
                         strokeWidth: 12, 
                         color: kPrimaryColor, 
                         strokeCap: StrokeCap.round,
@@ -280,9 +269,6 @@ class _TripTabState extends State<TripTab> {
                 ),
 
                 const SizedBox(height: 30),
-                const Text("Bắt đầu lúc: 21:50", style: TextStyle(color: Colors.grey)),
-                const SizedBox(height: 4),
-                const Text("Thời gian dự kiến: 15 phút", style: TextStyle(color: Colors.grey)),
               ],
             ),
           ),
@@ -291,10 +277,16 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
+  // Header dùng chung
   Widget _buildHeader({required String title, required String subtitle, IconData? icon, bool showAvatar = false}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-      color: kPrimaryColor, 
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [kPrimaryColor, Color(0xFF1D4ED8)],
+        ),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -326,6 +318,7 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
+  // Mở PinPad để xác thực an toàn
   void _openPinPad(BuildContext context, TripController controller) {
     showModalBottomSheet(
       context: context,
@@ -333,7 +326,9 @@ class _TripTabState extends State<TripTab> {
       backgroundColor: Colors.transparent,
       builder: (_) => PinPad(
         onPinSubmit: (String inputPin) async {
-          String status = await controller.verifyPin(inputPin);
+          // [MỚI] Truyền userId vào verifyPin
+          String status = await controller.verifyPin(widget.userId, inputPin);
+          
           if (!mounted) return;
 
           if (status == 'SAFE') {
