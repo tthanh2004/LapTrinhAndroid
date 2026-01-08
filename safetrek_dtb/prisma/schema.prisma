@@ -15,25 +15,21 @@ model User {
   
   phoneNumber   String?  @unique @map("phone_number") @db.VarChar(20)
   email         String?  @unique @db.VarChar(100)
+  fcmToken      String?  @map("fcm_token") @db.VarChar(255)
   
   fullName      String?   @map("full_name") @db.VarChar(100)
   avatarUrl     String?   @map("avatar_url") @db.VarChar(255)
   passwordHash  String?   @map("password_hash") @db.VarChar(255)
   safePinHash   String?   @map("safe_pin_hash") @db.VarChar(255)
   duressPinHash String?   @map("duress_pin_hash") @db.VarChar(255)
-
-  otpCode       String?   @map("otp_code") @db.VarChar(10)
-  otpExpiry     DateTime? @map("otp_expiry")
-
-  fcmToken      String?   @map("fcm_token") @db.VarChar(255)
   lastKnownLat  Decimal?  @map("last_known_lat") @db.Decimal(10, 8)
   lastKnownLng  Decimal?  @map("last_known_lng") @db.Decimal(11, 8)
-  lastBattery   Int?      @map("last_battery_level") @db.SmallInt
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp()
 
   guardians     Guardian[]
   trips         Trip[]
   alerts        Alert[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -88,6 +84,21 @@ model Alert {
   trip      Trip?     @relation(fields: [tripId], references: [tripId])
 
   @@map("alerts")
+}
+
+model Notification {
+  notificationId Int      @id @default(autoincrement()) @map("notification_id")
+  userId         Int      @map("user_id") // Người nhận thông báo
+  title          String   @db.VarChar(255)
+  body           String   @db.Text
+  type           String   @db.VarChar(50) // 'EMERGENCY', 'GUARDIAN_REQUEST'
+  data           String?  @db.Text        // Lưu JSON dữ liệu phụ (VD: ID chuyến đi, Lat/Lng)
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+  
+  user           User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("notifications")
 }
 
 enum GuardianStatus {

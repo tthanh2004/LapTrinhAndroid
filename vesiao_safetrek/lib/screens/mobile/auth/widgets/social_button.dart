@@ -5,12 +5,16 @@ class SocialButton extends StatelessWidget {
   final String text;
   final IconData icon;
   final VoidCallback onPressed;
+  
+  // 👇 [SỬA DÒNG NÀY] Đổi MaterialColor? thành Color?
+  final Color? iconColor; 
 
   const SocialButton({
     super.key,
     required this.text,
     required this.icon,
     required this.onPressed,
+    this.iconColor,
   });
 
   @override
@@ -30,7 +34,8 @@ class SocialButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.black54, size: 24),
+            // Color chấp nhận cả MaterialColor (Colors.red) lẫn Color thường (kPrimaryColor)
+            Icon(icon, color: iconColor ?? Colors.black54, size: 24),
             const SizedBox(width: 10),
             Text(
               text,

@@ -1,284 +1,195 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException, // [MỚI]
   UnauthorizedException,
-  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import * as admin from 'firebase-admin';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as nodemailer from 'nodemailer';
-import * as bcrypt from 'bcrypt'; // <--- Đã thêm thư viện mã hóa
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+  constructor(private prisma: PrismaService) {}
 
-  constructor(private prisma: PrismaService) {
-    this.initializeFirebase();
+  private async hashData(plainText: string): Promise<string> {
+    return await bcrypt.hash(plainText, 10);
   }
 
-  // ==========================================
-  // PHẦN 1: CÁC HÀM BẢO MẬT (HASH & COMPARE)
-  // ==========================================
-
-  async hashPassword(plainTextPassword: string): Promise<string> {
-    const saltRounds = 10;
-    return await bcrypt.hash(plainTextPassword, saltRounds);
-  }
-
-  async isPasswordMatch(
-    plainTextPassword: string,
-    hashedPassword: string,
+  private async isDataMatch(
+    plainText: string,
+    hashedData: string,
   ): Promise<boolean> {
-    return await bcrypt.compare(plainTextPassword, hashedPassword);
+    return await bcrypt.compare(plainText, hashedData);
   }
 
-  // ==========================================
-  // PHẦN 2: LOGIC ĐĂNG KÝ & ĐĂNG NHẬP MẬT KHẨU
-  // ==========================================
-
-  // API Đăng ký (Để tạo user mới với mật khẩu đã mã hóa)
+  // --- LOGIC ĐĂNG KÝ GỘP ---
   async register(body: {
     phoneNumber: string;
-    password: string;
+    passwordHash: string;
     fullName: string;
     email?: string;
+    safePinHash: string;
+    duressPinHash: string;
   }) {
-    // 1. Kiểm tra SĐT đã tồn tại chưa
+    // 1. Validate
+    if (
+      !body.phoneNumber ||
+      !body.passwordHash ||
+      !body.safePinHash ||
+      !body.duressPinHash
+    ) {
+      throw new BadRequestException('Vui lòng nhập đầy đủ thông tin và PIN.');
+    }
+    if (body.safePinHash === body.duressPinHash) {
+      throw new BadRequestException('Hai mã PIN không được trùng nhau.');
+    }
+
+    const validEmail =
+      body.email && body.email.trim() !== '' ? body.email.trim() : undefined;
+
+    // 2. Kiểm tra trùng lặp SĐT
     const existingUser = await this.prisma.user.findUnique({
       where: { phoneNumber: body.phoneNumber },
     });
+    if (existingUser)
+      throw new BadRequestException('Số điện thoại đã được đăng ký.');
 
-    if (existingUser) {
-      throw new BadRequestException('Số điện thoại này đã được đăng ký.');
+    // 3. Kiểm tra trùng lặp Email
+    if (validEmail) {
+      const existingEmail = await this.prisma.user.findUnique({
+        where: { email: validEmail },
+      });
+      if (existingEmail)
+        throw new BadRequestException('Email đã được sử dụng.');
     }
 
-    // 2. Mã hóa mật khẩu
-    const hashedPassword = await this.hashPassword(body.password);
+    // 4. Mã hóa dữ liệu
+    const [finalPasswordHash, finalSafePinHash, finalDuressPinHash] =
+      await Promise.all([
+        this.hashData(body.passwordHash),
+        this.hashData(body.safePinHash),
+        this.hashData(body.duressPinHash),
+      ]);
 
-    // 3. Tạo user mới
+    // 5. Lưu vào DB
     const newUser = await this.prisma.user.create({
       data: {
         phoneNumber: body.phoneNumber,
-        passwordHash: hashedPassword, // Lưu vào cột passwordHash theo đúng Schema
         fullName: body.fullName,
-        email: body.email,
-        // Các trường khác để null hoặc default
+        email: validEmail,
+        passwordHash: finalPasswordHash,
+        safePinHash: finalSafePinHash,
+        duressPinHash: finalDuressPinHash,
       },
     });
 
-    return {
-      message: 'Đăng ký thành công',
-      userId: newUser.userId,
-      fullName: newUser.fullName,
-    };
+    return { message: 'Đăng ký thành công', userId: newUser.userId };
   }
 
-  // API Đăng nhập bằng Mật khẩu
+  async verifySafePin(userId: number, pin: string) {
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (!user || !user.safePinHash)
+      throw new UnauthorizedException('Tài khoản lỗi.');
+    const isMatch = await this.isDataMatch(pin, user.safePinHash);
+    if (!isMatch) throw new UnauthorizedException('Mã PIN không chính xác.');
+    return { success: true, message: 'OK' };
+  }
+
   async loginWithPassword(identity: string, pass: string) {
-    // 1. Tìm user (check cả email HOẶC sđt)
     const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: identity }, { phoneNumber: identity }],
-      },
+      where: { OR: [{ phoneNumber: identity }, { email: identity }] },
     });
-
-    if (!user) {
-      throw new BadRequestException('Tài khoản không tồn tại.');
-    }
-
-    // 2. Kiểm tra xem user có mật khẩu không (Trường passwordHash trong Schema)
-    if (!user.passwordHash) {
-      throw new BadRequestException(
-        'Tài khoản này chưa thiết lập mật khẩu (có thể đăng ký bằng OTP).',
-      );
-    }
-
-    // 3. So sánh mật khẩu bằng bcrypt (An toàn)
-    const isMatch = await this.isPasswordMatch(pass, user.passwordHash);
-
-    if (!isMatch) {
-      throw new BadRequestException('Mật khẩu không chính xác.');
-    }
-
-    // 4. Trả về kết quả
+    if (!user) throw new UnauthorizedException('Tài khoản không tồn tại.');
+    if (!user.passwordHash)
+      throw new UnauthorizedException('Tài khoản chưa có mật khẩu.');
+    const isMatch = await this.isDataMatch(pass, user.passwordHash);
+    if (!isMatch) throw new UnauthorizedException('Mật khẩu không chính xác.');
     return {
       message: 'Đăng nhập thành công',
       user: {
         userId: user.userId,
         fullName: user.fullName,
-        email: user.email,
         phoneNumber: user.phoneNumber,
+        email: user.email,
         avatarUrl: user.avatarUrl,
       },
     };
   }
 
-  // ==========================================
-  // PHẦN 3: CÁC LOGIC CŨ (FIREBASE, OTP)
-  // ==========================================
-
-  private initializeFirebase() {
-    if (admin.apps.length === 0) {
-      try {
-        const serviceAccountPath = path.join(
-          process.cwd(),
-          'firebase-service-account.json',
-        );
-
-        if (!fs.existsSync(serviceAccountPath)) {
-          this.logger.error(`❌ Không tìm thấy file: ${serviceAccountPath}`);
-          return;
-        }
-
-        const fileContent = fs.readFileSync(serviceAccountPath, 'utf8');
-        const serviceAccount = JSON.parse(fileContent) as admin.ServiceAccount;
-
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-        });
-
-        this.logger.log('🔥 Firebase Admin initialized thành công');
-      } catch (error) {
-        this.logger.error('❌ Lỗi khởi tạo Firebase:', error);
-      }
-    }
-  }
-
-  async checkLoginMethod(phoneNumber: string) {
+  // [MỚI] Lấy thông tin User Profile
+  async getUserProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
-      where: { phoneNumber: phoneNumber },
+      where: { userId },
+      select: {
+        userId: true,
+        fullName: true,
+        phoneNumber: true,
+        email: true,
+        avatarUrl: true,
+      },
     });
-
-    if (user && user.email) {
-      try {
-        this.logger.log(`🔍 Tìm thấy email ${user.email}. Đang gửi OTP...`);
-        await this.sendEmailOtp(user.email);
-        return {
-          method: 'EMAIL',
-          message: `Mã OTP đã gửi tới ${this.maskEmail(user.email)}`,
-          target: user.email,
-        };
-      } catch (error) {
-        let errorMessage = 'Unknown error';
-        if (error instanceof Error) errorMessage = error.message;
-        this.logger.warn(
-          `⚠️ Gửi mail thất bại, chuyển sang SMS. Lỗi: ${errorMessage}`,
-        );
-      }
-    }
-
-    return {
-      method: 'SMS',
-      message: 'Vui lòng xác thực bằng SMS (Firebase)',
-      target: phoneNumber,
-    };
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
-  async loginWithFirebase(token: string) {
-    try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
-      const phoneNumber = decodedToken.phone_number;
-
-      if (!phoneNumber) {
-        throw new UnauthorizedException(
-          'Token không chứa số điện thoại hợp lệ',
-        );
-      }
-
-      this.logger.log(`✅ Xác thực Firebase OK: ${phoneNumber}`);
-
-      const user = await this.prisma.user.upsert({
-        where: { phoneNumber: phoneNumber },
-        update: {},
-        create: {
-          phoneNumber: phoneNumber,
-          fullName: 'Người dùng mới',
-        },
-      });
-
-      return {
-        message: 'Đăng nhập thành công',
-        user: {
-          userId: user.userId,
-          phoneNumber: user.phoneNumber,
-          fullName: user.fullName,
-          email: user.email,
-        },
-      };
-    } catch (error) {
-      this.logger.error('❌ Lỗi Firebase Admin:', error);
-      throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
-    }
+  // [MỚI] Cập nhật FCM Token
+  async updateFcmToken(userId: number, token: string) {
+    return this.prisma.user.update({
+      where: { userId },
+      data: { fcmToken: token },
+    });
   }
+  async updatePins(userId: number, safePin: string, duressPin: string) {
+    // 1. Hash 2 mã PIN mới
+    const safePinHash = await this.hashData(safePin);
+    const duressPinHash = await this.hashData(duressPin);
 
-  async sendEmailOtp(email: string) {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 5 * 60000);
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: 'thanhtlu2k44@gmail.com',
-        pass: 'tezxgrcnmkdwwfoa',
+    // 2. Cập nhật vào DB
+    await this.prisma.user.update({
+      where: { userId: userId },
+      data: {
+        safePinHash: safePinHash,
+        duressPinHash: duressPinHash,
       },
     });
 
-    await transporter.sendMail({
-      from: '"SafeTrek Security" <no-reply@safetrek.com>',
-      to: email,
-      subject: 'Mã xác thực đăng nhập SafeTrek',
-      html: `
-        <div style="font-family: Arial, sans-serif; text-align: center; border: 1px solid #ddd; padding: 20px; border-radius: 10px; max-width: 500px; margin: auto;">
-          <h2 style="color: #2c3e50;">Mã OTP của bạn</h2>
-          <p>Sử dụng mã dưới đây để đăng nhập vào SafeTrek:</p>
-          <h1 style="color: #e74c3c; letter-spacing: 5px; font-size: 32px; margin: 20px 0;">${otp}</h1>
-          <p style="color: #7f8c8d; font-size: 12px;">Mã có hiệu lực trong 5 phút.</p>
-        </div>
-      `,
-    });
-
-    this.logger.log(`📧 Đã gửi OTP tới: ${email}`);
-
-    await this.prisma.user.update({
-      where: { email: email },
-      data: { otpCode: otp, otpExpiry: expiry },
-    });
-    return true;
+    return { success: true, message: 'Đổi mã PIN thành công' };
   }
 
-  async verifyEmailOtp(email: string, code: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+  async updateProfile(
+    userId: number,
+    data: { fullName?: string; email?: string },
+  ) {
+    // 1. Kiểm tra user tồn tại
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (!user) throw new NotFoundException('Người dùng không tồn tại');
 
-    if (!user)
-      throw new BadRequestException('Không tìm thấy tài khoản email này.');
-    if (user.otpCode !== code)
-      throw new BadRequestException('Mã OTP không chính xác.');
-    if (user.otpExpiry && new Date() > user.otpExpiry)
-      throw new BadRequestException('Mã OTP đã hết hạn.');
+    // 2. Nếu có cập nhật email, kiểm tra xem email mới có bị trùng với người khác không
+    if (data.email && data.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (emailExists) {
+        throw new BadRequestException('Email này đã được người khác sử dụng.');
+      }
+    }
 
+    // 3. Tiến hành cập nhật
     const updatedUser = await this.prisma.user.update({
-      where: { userId: user.userId },
-      data: { otpCode: null, otpExpiry: null },
+      where: { userId },
+      data: {
+        fullName: data.fullName,
+        email: data.email,
+      },
     });
 
     return {
-      message: 'Đăng nhập thành công',
+      message: 'Cập nhật thành công',
       user: {
         userId: updatedUser.userId,
         fullName: updatedUser.fullName,
-        phoneNumber: updatedUser.phoneNumber,
+        email: updatedUser.email,
       },
     };
-  }
-
-  private maskEmail(email: string): string {
-    if (!email) return '';
-    const [name, domain] = email.split('@');
-    return name.length <= 2
-      ? `${name}***@${domain}`
-      : `${name.substring(0, 2)}***@${domain}`;
   }
 }

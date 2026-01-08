@@ -6,7 +6,9 @@ import '../../../controllers/trip_controller.dart';
 import '../../../widgets/pin_pad.dart';
 
 class TripTab extends StatefulWidget {
-  const TripTab({super.key});
+  final int userId;
+
+  const TripTab({super.key, required this.userId});
 
   @override
   State<TripTab> createState() => _TripTabState();
@@ -15,405 +17,141 @@ class TripTab extends StatefulWidget {
 class _TripTabState extends State<TripTab> {
   final TextEditingController _destController = TextEditingController();
 
+  // State quản lý hiển thị Modal SOS
+  bool _showPanicAlert = false;
+  bool _isSending = false;
+
   @override
   void dispose() {
     _destController.dispose();
     super.dispose();
   }
 
-  // --- LOGIC HIỆN CẢNH BÁO ---
-  void _showPanicAlert(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64, height: 64,
-                decoration: const BoxDecoration(
-                  color: kDangerLight,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.warning_amber_rounded, color: kDangerColor, size: 32),
-              ),
-              const SizedBox(height: 16),
-              const Text("Cảnh báo đã được gửi!", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              const Text("Danh bạ khẩn cấp của bạn đã nhận được thông báo và vị trí của bạn", style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    // Tự tắt sau 3s
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
+  // --- HÀM XỬ LÝ NÚT HOẢNG LOẠN (ĐÃ CẬP NHẬT THEO YÊU CẦU) ---
+  Future<void> _handlePanicButton() async {
+    // 1. Hiển thị Modal trạng thái đang gửi đè lên màn hình
+    setState(() {
+      _showPanicAlert = true;
+      _isSending = true;
     });
+
+    try {
+      final controller = Provider.of<TripController>(context, listen: false);
+      
+      // 2. Gửi tín hiệu khẩn cấp GPS thật lên server
+      await controller.triggerPanic(widget.userId);
+
+      // 3. THOÁT TRẠNG THÁI GIÁM SÁT NGAY LẬP TỨC
+      controller.stopTrip(isSafe: false);
+
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+
+      // 4. Đợi 4 giây hiển thị thông báo rồi đóng Modal
+      Timer(const Duration(seconds: 4), () {
+        if (mounted) {
+          setState(() {
+            _showPanicAlert = false;
+          });
+        }
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<TripController>(
-      builder: (context, controller, child) {
-        return controller.isMonitoring 
-            ? _buildActiveView(context, controller) 
-            : _buildSetupView(context, controller);
-      },
+    return Scaffold(
+      body: Stack(
+        children: [
+          Consumer<TripController>(
+            builder: (context, controller, child) {
+              return controller.isMonitoring
+                  ? _buildActiveView(context, controller)
+                  : _buildSetupView(context, controller);
+            },
+          ),
+          if (_showPanicAlert) _buildPanicModal(),
+        ],
+      ),
     );
   }
 
-  // --- VIEW 1: CÀI ĐẶT ---
   Widget _buildSetupView(BuildContext context, TripController controller) {
-
-    return Column(
-
-      children: [
-
-        Container(
-
-          padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-
-          decoration: const BoxDecoration(
-
-            gradient: LinearGradient(
-
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-
-              colors: [kPrimaryColor, Color(0xFF1D4ED8)], // Gradient Blue
-
-            ),
-
-          ),
-
-          child: Row(
-
-            children: [
-
-              const Icon(Icons.shield, color: Colors.white, size: 40),
-
-              const SizedBox(width: 12),
-
-              Column(
-
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: const [
-
-                  Text("Cài đặt chuyến đi", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-
-                  Text("Thiết lập giám sát an toàn", style: TextStyle(color: Colors.white70, fontSize: 14)),
-
-                ],
-
-              ),
-
-            ],
-
-          ),
-
-        ),
-
-        Expanded(
-
-          child: ListView(
-
-            padding: const EdgeInsets.all(24),
-
-            children: [
-
-              Container(
-
-                padding: const EdgeInsets.all(16),
-
-                decoration: BoxDecoration(color: kPrimaryLight, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue.shade200)),
-
-                child: Row(
-
-                  crossAxisAlignment: CrossAxisAlignment.start,
-
-                  children: const [
-
-                    Icon(Icons.shield, size: 16, color: kPrimaryColor),
-
-                    SizedBox(width: 8),
-
-                    Expanded(child: Text("Chúng tôi sẽ theo dõi chuyến đi của bạn. Nếu bạn không xác nhận an toàn trước khi hết giờ, cảnh báo sẽ được gửi tự động.", style: TextStyle(color: kPrimaryColor, fontSize: 13, height: 1.4))),
-
-                  ],
-
-                ),
-
-              ),
-
-              const SizedBox(height: 24),
-
-              const Text("Điểm đến (Tùy chọn)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
-
-              const SizedBox(height: 8),
-
-              TextField(
-
-                controller: _destController,
-
-                decoration: InputDecoration(
-
-                  hintText: "Ví dụ: Nhà, Ký túc xá...",
-
-                  prefixIcon: const Icon(Icons.location_on, size: 20),
-
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-
-                ),
-
-              ),
-
-              const SizedBox(height: 16),
-
-              const Text("Thời gian dự kiến (phút)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
-
-              const SizedBox(height: 8),
-
-              TextField(
-
-                controller: TextEditingController(text: controller.selectedMinutes.toString()),
-
-                readOnly: true,
-
-                decoration: InputDecoration(
-
-                  prefixIcon: const Icon(Icons.access_time, size: 20),
-
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-
-                ),
-
-              ),
-
-              const SizedBox(height: 16),
-
-              const Text("Chọn nhanh:", style: TextStyle(color: kSubTextColor, fontSize: 14)),
-
-              const SizedBox(height: 8),
-
-              Wrap(
-
-                spacing: 8,
-
-                children: [5, 10, 15, 30, 60].map((mins) {
-
-                  final isSelected = controller.selectedMinutes == mins;
-
-                  return ChoiceChip(
-
-                    label: Text("$mins phút"),
-
-                    selected: isSelected,
-
-                    onSelected: (_) => controller.setDuration(mins),
-
-                    selectedColor: kPrimaryColor,
-
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : kSubTextColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
-
-                    backgroundColor: Colors.white,
-
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isSelected ? kPrimaryColor : Colors.grey.shade300)),
-
-                  );
-
-                }).toList(),
-
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-
-                width: double.infinity, height: 56,
-
-                child: ElevatedButton.icon(
-
-                  onPressed: () => controller.startTrip(_destController.text.isEmpty ? null : _destController.text),
-
-                  icon: const Icon(Icons.shield, size: 20),
-
-                  label: const Text("Bắt đầu giám sát", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-
-                  style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-
-                ),
-
-              ),
-
-              const SizedBox(height: 32),
-
-              const Divider(),
-
-              const SizedBox(height: 24),
-
-              Container(
-
-                padding: const EdgeInsets.all(16),
-
-                margin: const EdgeInsets.only(bottom: 12),
-
-                decoration: BoxDecoration(color: kDangerLight, borderRadius: BorderRadius.circular(12)),
-
-                child: Row(
-
-                  children: const [
-
-                    Icon(Icons.info_outline, size: 16, color: kDangerColor),
-
-                    SizedBox(width: 8),
-
-                    Expanded(child: Text("Nút khẩn cấp sẽ gửi cảnh báo ngay lập tức.", style: TextStyle(color: kDangerColor, fontSize: 13))),
-
-                  ],
-
-                ),
-
-              ),
-
-              SizedBox(
-
-                width: double.infinity, height: 56,
-
-                child: ElevatedButton.icon(
-
-                  onPressed: () => _showPanicAlert(context),
-
-                  icon: const Icon(Icons.warning_amber_rounded, size: 24),
-
-                  label: const Text("NÚT HOẢNG LOẠN", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-
-                  style: ElevatedButton.styleFrom(backgroundColor: kDangerColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-
-                ),
-
-              ),
-
-              const SizedBox(height: 24),
-
-            ],
-
-          ),
-
-        ),
-
-      ],
-
-    );
-  }
-
-  // --- VIEW 2: ĐANG GIÁM SÁT ---
-  Widget _buildActiveView(BuildContext context, TripController controller) {
     return Column(
       children: [
-        // Header
-        _buildHeader(
-          title: "Đang giám sát", 
-          subtitle: "Phú Thọ", // Địa điểm giả lập theo ảnh
-          icon: Icons.shield_outlined,
-          showAvatar: true
-        ),
-        
+        _buildHeader(title: "Cài đặt chuyến đi", subtitle: "Thiết lập giám sát an toàn", icon: Icons.shield),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            padding: const EdgeInsets.all(24),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 20),
-                // Đồng hồ đếm ngược to
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(width: 260, height: 260, child: CircularProgressIndicator(value: 1, strokeWidth: 12, color: Colors.grey.shade100)),
-                    SizedBox(
-                      width: 260, height: 260,
-                      child: CircularProgressIndicator(
-                        value: 0.75, // Giá trị demo
-                        strokeWidth: 12, 
-                        color: kPrimaryColor, // Màu xanh dương
-                        strokeCap: StrokeCap.round,
-                      ),
-                    ),
-                    Column(children: [
-                      Text(controller.formattedTime, style: const TextStyle(fontSize: 64, fontWeight: FontWeight.bold, color: kPrimaryColor)),
-                      const Text("còn lại", style: TextStyle(color: Colors.grey, fontSize: 16)),
-                    ]),
-                  ],
-                ),
-                const SizedBox(height: 40),
-
-                // Info Box
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF), // Xanh rất nhạt
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFDBEAFE)),
-                  ),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: kPrimaryLight, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue.shade200)),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
-                      Icon(Icons.shield_outlined, color: kPrimaryColor, size: 20),
-                      SizedBox(width: 12),
-                      Expanded(child: Text("Chúng tôi đang theo dõi di chuyển của bạn", style: TextStyle(color: Color(0xFF1E40AF), fontSize: 14))),
+                      Icon(Icons.shield, size: 16, color: kPrimaryColor),
+                      SizedBox(width: 8),
+                      Expanded(child: Text("Chúng tôi sẽ theo dõi chuyến đi của bạn. Nếu bạn không xác nhận an toàn trước khi hết giờ, cảnh báo sẽ được gửi tự động.", style: TextStyle(color: kPrimaryColor, fontSize: 13, height: 1.4))),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Nút Xanh: Tôi đã an toàn
-                SizedBox(
-                  width: double.infinity, height: 56,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _openPinPad(context, controller),
-                    icon: const Icon(Icons.check_circle_outline, size: 24),
-                    label: const Text("Tôi đã an toàn", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981), // Màu xanh lá chuẩn Material
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                  ),
+                const Text("Điểm đến (Tùy chọn)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _destController,
+                  decoration: InputDecoration(hintText: "Ví dụ: Nhà, Ký túc xá...", prefixIcon: const Icon(Icons.location_on, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
                 ),
                 const SizedBox(height: 16),
-
-                // Nút Đỏ: HOẢNG LOẠN
+                const Text("Thời gian dự kiến (phút)", style: TextStyle(color: kSubTextColor, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: TextEditingController(text: controller.selectedMinutes.toString()),
+                  readOnly: true,
+                  decoration: InputDecoration(prefixIcon: const Icon(Icons.access_time, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+                ),
+                const SizedBox(height: 16),
+                const Text("Chọn nhanh:", style: TextStyle(color: kSubTextColor, fontSize: 14)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [5, 10, 15, 30, 60].map((mins) {
+                    final isSelected = controller.selectedMinutes == mins;
+                    return ChoiceChip(label: Text("$mins phút"), selected: isSelected, onSelected: (_) => controller.setDuration(mins), selectedColor: kPrimaryColor, labelStyle: TextStyle(color: isSelected ? Colors.white : kSubTextColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), backgroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: isSelected ? kPrimaryColor : Colors.grey.shade300)));
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
                 SizedBox(
-                  width: double.infinity, height: 56,
+                  width: double.infinity,
+                  height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: () => _showPanicAlert(context),
-                    icon: const Icon(Icons.error_outline, size: 24),
-                    label: const Text("NÚT HOẢNG LOẠN", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEF4444), // Màu đỏ chuẩn Material
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
+                    onPressed: () {
+                      controller.startTrip(userId: widget.userId, destinationName: _destController.text.isEmpty ? null : _destController.text);
+                    },
+                    icon: const Icon(Icons.shield, size: 20),
+                    label: const Text("Bắt đầu giám sát", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   ),
                 ),
-
-                const SizedBox(height: 30),
-                // Footer Text
-                const Text("Bắt đầu lúc: 21:50", style: TextStyle(color: Colors.grey)),
-                const SizedBox(height: 4),
-                const Text("Thời gian dự kiến: 15 phút", style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 32),
+                const Divider(),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(color: kDangerLight, borderRadius: BorderRadius.circular(12)),
+                  child: Row(children: const [Icon(Icons.info_outline, size: 16, color: kDangerColor), SizedBox(width: 8), Expanded(child: Text("Nút khẩn cấp sẽ gửi cảnh báo ngay lập tức.", style: TextStyle(color: kDangerColor, fontSize: 13)))]),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(onPressed: _handlePanicButton, icon: const Icon(Icons.warning_amber_rounded, size: 24), label: const Text("NÚT HOẢNG LOẠN", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: kDangerColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),
@@ -422,43 +160,77 @@ class _TripTabState extends State<TripTab> {
     );
   }
 
-  // --- Widget Header chung ---
-  Widget _buildHeader({required String title, required String subtitle, IconData? icon, bool showAvatar = false}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-      color: kPrimaryColor, // Màu xanh dương phẳng (Solid)
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              if (icon != null) ...[Icon(icon, color: Colors.white, size: 28), const SizedBox(width: 12)],
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (showAvatar) const Icon(Icons.location_on, color: Colors.white70, size: 14),
-                        if (showAvatar) const SizedBox(width: 4),
-                        Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                      ],
-                    ),
+  Widget _buildActiveView(BuildContext context, TripController controller) {
+    return Column(
+      children: [
+        _buildHeader(title: "Đang giám sát", subtitle: _destController.text.isNotEmpty ? _destController.text : "Đang di chuyển", icon: Icons.shield_outlined, showAvatar: true),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(width: 260, height: 260, child: CircularProgressIndicator(value: 1, strokeWidth: 12, color: Colors.grey.shade100)),
+                    SizedBox(width: 260, height: 260, child: CircularProgressIndicator(value: controller.progress, strokeWidth: 12, color: kPrimaryColor, strokeCap: StrokeCap.round)),
+                    Column(children: [Text(controller.formattedTime, style: const TextStyle(fontSize: 64, fontWeight: FontWeight.bold, color: kPrimaryColor)), const Text("còn lại", style: TextStyle(color: Colors.grey, fontSize: 16))]),
                   ],
-                ],
-              ),
-            ],
-          ),
-          if (showAvatar)
-            Container(
-              width: 40, height: 40,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                ),
+                const SizedBox(height: 40),
+                Container(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20), decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDBEAFE))), child: Row(children: const [Icon(Icons.shield_outlined, color: kPrimaryColor, size: 20), SizedBox(width: 12), Expanded(child: Text("Chúng tôi đang theo dõi di chuyển của bạn", style: TextStyle(color: Color(0xFF1E40AF), fontSize: 14)))])),
+                const SizedBox(height: 24),
+                SizedBox(width: double.infinity, height: 56, child: ElevatedButton.icon(onPressed: () => _openPinPad(context, controller), icon: const Icon(Icons.check_circle_outline, size: 24), label: const Text("Tôi đã an toàn", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0))),
+                const SizedBox(height: 16),
+                SizedBox(width: double.infinity, height: 56, child: ElevatedButton.icon(onPressed: _handlePanicButton, icon: const Icon(Icons.error_outline, size: 24), label: const Text("NÚT HOẢNG LOẠN", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0))),
+                const SizedBox(height: 30),
+              ],
             ),
-        ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader({required String title, required String subtitle, IconData? icon, bool showAvatar = false}) {
+    return Container(padding: const EdgeInsets.fromLTRB(24, 60, 24, 24), decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [kPrimaryColor, Color(0xFF1D4ED8)])), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [if (icon != null) ...[Icon(icon, color: Colors.white, size: 28), const SizedBox(width: 12)], Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), if (subtitle.isNotEmpty) Row(children: [if (showAvatar) const Icon(Icons.location_on, color: Colors.white70, size: 14), if (showAvatar) const SizedBox(width: 4), Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14))])])]), if (showAvatar) Container(width: 40, height: 40, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle))]));
+  }
+
+  Widget _buildPanicModal() {
+    return Container(
+      color: Colors.black.withOpacity(0.6),
+      alignment: Alignment.center,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.85,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(alignment: Alignment.topRight, child: GestureDetector(onTap: () => setState(() => _showPanicAlert = false), child: const Icon(Icons.close, color: Colors.black54, size: 24))),
+            Container(padding: const EdgeInsets.all(20), decoration: const BoxDecoration(color: Color(0xFFFEF2F2), shape: BoxShape.circle), child: _isSending ? const CircularProgressIndicator(color: Colors.red) : const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 60)),
+            const SizedBox(height: 24),
+            Text(_isSending ? "ĐANG GỬI CỨU HỘ..." : "Cảnh báo SOS đã được gửi!", textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+            const SizedBox(height: 24),
+            if (!_isSending) Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12)),
+              child: Column(children: [
+                _buildPanicInfoRow("Cảnh báo khẩn cấp"),
+                _buildPanicInfoRow("Vị trí GPS"),
+                _buildPanicInfoRow("Mức pin điện thoại"),
+                _buildPanicInfoRow("Thời gian cảnh báo"),
+              ]),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildPanicInfoRow(String text) {
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(children: [const Icon(Icons.circle, color: Colors.red, size: 8), const SizedBox(width: 12), Text(text, style: const TextStyle(color: Color(0xFF64748B), fontSize: 15))]));
   }
 
   void _openPinPad(BuildContext context, TripController controller) {
@@ -467,50 +239,34 @@ class _TripTabState extends State<TripTab> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => PinPad(
-        // Callback nhận chuỗi PIN (String)
         onPinSubmit: (String inputPin) async {
-          
-          // 1. Gọi API Verify
-          // (PinPad đã tự hiện loading nhẹ, ở đây ta đợi kết quả)
-          String status = await controller.verifyPin(inputPin);
-
-          // Kiểm tra xem widget còn tồn tại không trước khi dùng context
+          String status = await controller.verifyPin(widget.userId, inputPin);
           if (!mounted) return;
 
-          // 2. Xử lý kết quả
           if (status == 'SAFE') {
-            Navigator.pop(context); // Tắt bảng PIN
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("✅ Đã xác nhận an toàn!"), backgroundColor: Colors.green)
-            );
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã xác nhận an toàn!"), backgroundColor: Colors.green));
             controller.stopTrip(isSafe: true);
-          } 
-          else if (status == 'DURESS') {
-            Navigator.pop(context); // Tắt bảng PIN
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("⚠️ Cảnh báo ngầm đã được gửi!"), backgroundColor: Colors.orange)
-            );
-            controller.stopTrip(isSafe: false); // Kết thúc nhưng đánh dấu duress
-          } 
-          else {
-            // Trường hợp INVALID hoặc ERROR
-            // Đóng bảng PIN cũ và hiện thông báo lỗi
-            Navigator.pop(context); 
-            
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(status == 'INVALID' ? "❌ Mã PIN không đúng!" : "Lỗi kết nối Server"),
-                backgroundColor: Colors.red,
-              )
-            );
-            
-            // Mở lại bảng PIN để nhập lại (Hoặc bạn có thể giữ nguyên bảng PIN nếu sửa PinPad phức tạp hơn)
-            // Ở đây mình chọn cách đơn giản: Báo lỗi xong cho mở lại
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted && controller.isMonitoring) {
-                 _openPinPad(context, controller);
-              }
-            });
+          } else if (status == 'DURESS') {
+            Navigator.pop(context);
+            await controller.triggerPanic(widget.userId);
+            controller.stopTrip(isSafe: false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚠️ Cảnh báo ngầm đã được gửi!"), backgroundColor: Colors.orange));
+          } else {
+            // GỌI HÀM TỪ CONTROLLER ĐỂ ĐẾM LỖI PIN (Không bị reset khi reload giao diện)
+            int currentErrors = controller.incrementPinError();
+            Navigator.pop(context);
+
+            if (currentErrors >= 5) {
+              await controller.triggerPanic(widget.userId);
+              controller.stopTrip(isSafe: false);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã xác nhận an toàn!"), backgroundColor: Colors.green));
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Mã PIN không đúng! (Lần $currentErrors/5)"), backgroundColor: Colors.red));
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && controller.isMonitoring) _openPinPad(context, controller);
+              });
+            }
           }
         },
       ),

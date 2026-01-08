@@ -51,4 +51,26 @@ class EmergencyService {
       desiredAccuracy: LocationAccuracy.high, // Độ chính xác cao nhất cho khẩn cấp
     );
   }
+  Future<void> sendPushNotification({
+  required int receiverId, 
+  required String title, 
+  required String body
+}) async {
+  try {
+    // Gọi API Backend của bạn (Backend sẽ lo việc lấy Token và gửi FCM)
+    await http.post(
+      Uri.parse('${Constants.baseUrl}/notifications/send'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'userId': receiverId,
+        'title': title,
+        'body': body,
+        'type': 'NORMAL_MESSAGE' // Hoặc 'EMERGENCY'
+      }),
+    );
+    print("Đã gửi lệnh push lên server");
+  } catch (e) {
+    print("Lỗi gửi push: $e");
+  }
+}
 }

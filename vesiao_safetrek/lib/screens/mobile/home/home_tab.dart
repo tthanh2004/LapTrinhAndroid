@@ -3,14 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-
-import '../../../common/constants.dart';
-// Không cần import TripTab hay ContactsTab ở đây nữa vì MobileScreen lo rồi
+import '../../../../common/constants.dart';
+import 'notification_screen.dart';
 
 class HomeTab extends StatefulWidget {
   final int userId;
-  final VoidCallback onGoToTrip;     // [MỚI] Hàm callback để chuyển sang tab Trip
-  final VoidCallback onGoToContacts; // [MỚI] Hàm callback để chuyển sang tab Contacts
+  final VoidCallback onGoToTrip;
+  final VoidCallback onGoToContacts;
 
   const HomeTab({
     super.key,
@@ -27,48 +26,53 @@ class _HomeTabState extends State<HomeTab> {
   bool _showPanicAlert = false;
   bool _isPressing = false;
   bool _isSending = false;
+  
+  int _unreadCount = 0;
+  Timer? _timer;
 
-  // --- LOGIC GỬI SOS ---
-  Future<void> _handlePanicButton() async {
-    setState(() {
-      _showPanicAlert = true;
-      _isSending = true;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _fetchUnreadCount();
+    _timer = Timer.periodic(const Duration(seconds: 10), (timer) => _fetchUnreadCount());
+  }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchUnreadCount() async {
     try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+      final response = await http.get(
+        Uri.parse('${Constants.baseUrl}/emergency/notifications/unread/${widget.userId}'),
       );
-
-      final response = await http.post(
-        Uri.parse('${Constants.baseUrl}/emergency/panic'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': widget.userId,
-          'lat': position.latitude,
-          'lng': position.longitude,
-        }),
-      );
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        debugPrint("✅ SOS Sent: ${position.latitude}, ${position.longitude}");
-      }
-    } catch (e) {
-      debugPrint("❌ SOS Error: $e");
-    } finally {
-      if (mounted) {
+      if (response.statusCode == 200 && mounted) {
+        final data = jsonDecode(response.body);
         setState(() {
-          _isSending = false;
+          _unreadCount = data['count'] ?? 0;
         });
       }
-      Timer(const Duration(seconds: 4), () {
-        if (mounted) setState(() { _showPanicAlert = false; });
-      });
+    } catch (_) {}
+  }
+
+  Future<void> _handlePanicButton() async {
+    setState(() { _showPanicAlert = true; _isSending = true; });
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+
+      await http.post(
+        Uri.parse('${Constants.baseUrl}/emergency/panic'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'userId': widget.userId, 'lat': position.latitude, 'lng': position.longitude}),
+      );
+    } catch (_) {} 
+    finally {
+      if (mounted) setState(() => _isSending = false);
+      Timer(const Duration(seconds: 4), () { if (mounted) setState(() { _showPanicAlert = false; }); });
     }
   }
 
@@ -77,14 +81,11 @@ class _HomeTabState extends State<HomeTab> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Gradient
           Container(
-            width: double.infinity,
-            height: double.infinity,
+            width: double.infinity, height: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
                 colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
               ),
             ),
@@ -102,22 +103,9 @@ class _HomeTabState extends State<HomeTab> {
                           _buildSosButton(),
                           const SizedBox(height: 30),
                           _buildInfoTextBox(),
-                          
-                          // --- NÚT 1: CÀI ĐẶT CHUYẾN ĐI ---
-                          _buildActionButton(
-                            icon: Icons.location_on,
-                            text: "Cài đặt chuyến đi",
-                            onTap: widget.onGoToTrip, // Gọi callback của cha
-                          ),
-                          
+                          _buildActionButton(icon: Icons.location_on, text: "Cài đặt chuyến đi", onTap: widget.onGoToTrip),
                           const SizedBox(height: 16),
-                          
-                          // --- NÚT 2: QUẢN LÝ DANH BẠ ---
-                          _buildActionButton(
-                            icon: Icons.people,
-                            text: "Quản lý danh bạ khẩn cấp",
-                            onTap: widget.onGoToContacts, // Gọi callback của cha
-                          ),
+                          _buildActionButton(icon: Icons.people, text: "Quản lý danh bạ khẩn cấp", onTap: widget.onGoToContacts),
                         ],
                       ),
                     ),
@@ -126,13 +114,12 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
+          // Modal cảnh báo SOS đồng bộ với TripTab
           if (_showPanicAlert) _buildPanicModal(),
         ],
       ),
     );
   }
-
-  // --- CÁC WIDGET CON ---
 
   Widget _buildHeader() {
     return Padding(
@@ -144,14 +131,43 @@ class _HomeTabState extends State<HomeTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("SafeTrek",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold)),
-              Text("Vệ Sĩ Ảo của bạn",
-                  style: TextStyle(color: Colors.blue[100], fontSize: 14)),
+              const Text("SafeTrek", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              Text("Vệ Sĩ Ảo của bạn", style: TextStyle(color: Colors.blue[100], fontSize: 14)),
             ],
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => NotificationScreen(userId: widget.userId)),
+              );
+              _fetchUnreadCount();
+            },
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
+                ),
+                if (_unreadCount > 0)
+                  Positioned(
+                    right: 0, top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      child: Text(
+                        _unreadCount > 9 ? "9+" : "$_unreadCount",
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+              ],
+            ),
           ),
         ],
       ),
@@ -160,152 +176,115 @@ class _HomeTabState extends State<HomeTab> {
 
   Widget _buildStatusCard() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-              width: 12,
-              height: 12,
-              decoration: const BoxDecoration(
-                  color: Color(0xFF4ADE80), shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          const Text("Bạn đang an toàn",
-              style: TextStyle(color: Colors.white, fontSize: 18)),
-        ],
-      ),
+      width: double.infinity, padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.3))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Container(width: 12, height: 12, decoration: const BoxDecoration(color: Color(0xFF4ADE80), shape: BoxShape.circle)), const SizedBox(width: 8), const Text("Bạn đang an toàn", style: TextStyle(color: Colors.white, fontSize: 18))]),
     );
   }
 
   Widget _buildSosButton() {
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressing = true),
-      onTapUp: (_) {
-        setState(() => _isPressing = false);
-        _handlePanicButton();
-      },
+      onTapUp: (_) { setState(() => _isPressing = false); _handlePanicButton(); },
       onTapCancel: () => setState(() => _isPressing = false),
-      child: AnimatedScale(
-        scale: _isPressing ? 0.90 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          width: 240,
-          height: 240,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFFDC2626),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.red.withOpacity(_isPressing ? 0.6 : 0.3),
-                  blurRadius: 40,
-                  spreadRadius: 10)
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.error_outline, color: Colors.white, size: 90),
-              SizedBox(height: 10),
-              Text("SOS",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold)),
-              Text("Nhấn để cảnh báo",
-                  style: TextStyle(color: Colors.white70, fontSize: 14)),
-            ],
-          ),
-        ),
-      ),
+      child: AnimatedScale(scale: _isPressing ? 0.90 : 1.0, duration: const Duration(milliseconds: 100), child: Container(width: 240, height: 240, decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFDC2626), boxShadow: [BoxShadow(color: Colors.red.withOpacity(_isPressing ? 0.6 : 0.3), blurRadius: 40, spreadRadius: 10)]), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.error_outline, color: Colors.white, size: 90), SizedBox(height: 10), Text("SOS", style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold)), Text("Nhấn để cảnh báo", style: TextStyle(color: Colors.white70, fontSize: 14))]))),
     );
   }
 
-  Widget _buildInfoTextBox() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF7F1D1D).withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF87171).withOpacity(0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Icon(Icons.info_outline, size: 16, color: Colors.white70),
-          SizedBox(width: 8),
-          Expanded(
-              child: Text(
-                  "Nút SOS sẽ gửi cảnh báo khẩn cấp ngay lập tức đến tất cả danh bạ khẩn cấp của bạn.",
-                  style: TextStyle(color: Colors.white70, fontSize: 13))),
-        ],
-      ),
-    );
-  }
+  Widget _buildInfoTextBox() { return Container(padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: const Color(0xFF7F1D1D).withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFF87171).withOpacity(0.3))), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [Icon(Icons.info_outline, size: 16, color: Colors.white70), SizedBox(width: 8), Expanded(child: Text("Nút SOS sẽ gửi cảnh báo khẩn cấp ngay lập tức đến tất cả danh bạ khẩn cấp của bạn.", style: TextStyle(color: Colors.white70, fontSize: 13)))])); }
+  
+  Widget _buildActionButton({required IconData icon, required String text, required VoidCallback onTap}) { return Material(color: Colors.white, borderRadius: BorderRadius.circular(12), elevation: 2, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(12), child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: const Color(0xFF1D4ED8), size: 20), const SizedBox(width: 8), Text(text, style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 15, fontWeight: FontWeight.w600))])))); }
 
-  Widget _buildActionButton(
-      {required IconData icon,
-      required String text,
-      required VoidCallback onTap}) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: const Color(0xFF1D4ED8), size: 20),
-              const SizedBox(width: 8),
-              Text(text,
-                  style: const TextStyle(
-                      color: Color(0xFF1D4ED8),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
+  // --- WIDGET MODAL PANIC (ĐÃ FIX THEO FIGMA image_a2d128.png) ---
   Widget _buildPanicModal() {
     return Container(
-      color: Colors.black.withOpacity(0.8),
+      color: Colors.black.withOpacity(0.6),
       alignment: Alignment.center,
       child: Container(
-        margin: const EdgeInsets.all(24),
+        width: MediaQuery.of(context).size.width * 0.85,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(20)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _isSending
-                ? const CircularProgressIndicator(color: Colors.red)
-                : const Icon(Icons.check_circle, color: Colors.green, size: 60),
-            const SizedBox(height: 20),
-            Text(
-              _isSending ? "ĐANG GỬI CỨU HỘ..." : "ĐÃ GỬI CẢNH BÁO SOS!",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            // Nút X đóng ở góc phải
+            Align(
+              alignment: Alignment.topRight,
+              child: GestureDetector(
+                onTap: () => setState(() => _showPanicAlert = false),
+                child: const Icon(Icons.close, color: Colors.black54, size: 24),
+              ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-                "Vị trí GPS và thông tin của bạn đã được gửi tới người thân.",
-                textAlign: TextAlign.center),
+            
+            // Icon cảnh báo đỏ trong vòng tròn hồng nhạt
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                shape: BoxShape.circle,
+              ),
+              child: _isSending 
+                  ? const CircularProgressIndicator(color: Colors.red)
+                  : const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 60),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Tiêu đề thông báo
+            Text(
+              _isSending ? "ĐANG GỬI CỨU HỘ..." : "Cảnh báo SOS đã được gửi!",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Danh sách các dòng thông tin có chấm tròn đỏ chuẩn Figma
+            if (!_isSending)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    _buildPanicInfoRow("Cảnh báo khẩn cấp"),
+                    _buildPanicInfoRow("Vị trí GPS"),
+                    _buildPanicInfoRow("Mức pin điện thoại"),
+                    _buildPanicInfoRow("Thời gian cảnh báo"),
+                  ],
+                ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Widget phụ tạo dòng thông tin có bullet point đỏ
+  Widget _buildPanicInfoRow(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Icon(Icons.circle, color: Colors.red, size: 8),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 15,
+            ),
+          ),
+        ],
       ),
     );
   }

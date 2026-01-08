@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http; // Import http
 import '../../../../common/constants.dart';
 
 // Các màu sắc riêng cho màn hình này
@@ -8,7 +10,8 @@ const Color kDuressPinBg = Color(0xFFFEF2F2);
 const Color kDuressPinBorder = Color(0xFFFEE2E2);
 
 class CreateNewPinScreen extends StatefulWidget {
-  const CreateNewPinScreen({super.key});
+  final int userId; // [QUAN TRỌNG] Nhận userId để biết update cho ai
+  const CreateNewPinScreen({super.key, required this.userId});
 
   @override
   State<CreateNewPinScreen> createState() => _CreateNewPinScreenState();
@@ -23,6 +26,7 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
 
   bool _isButtonEnabled = false;
   bool _isObscure = true;
+  bool _isLoading = false; // Trạng thái loading
 
   // Hàm kiểm tra điều kiện để bật nút Lưu
   void _check() {
@@ -40,6 +44,45 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
     setState(() {
       _isButtonEnabled = safeFilled && duressFilled && safeMatched && duressMatched && pinsDifferent;
     });
+  }
+
+  // Hàm gọi API cập nhật PIN
+  Future<void> _handleUpdatePin() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}/auth/update-pins'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': widget.userId,
+          'safePin': _safePin.text,
+          'duressPin': _duressPin.text,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Thành công
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Đổi mã PIN thành công!"), backgroundColor: Colors.green)
+        );
+        Navigator.pop(context); // Quay về Settings
+      } else {
+        // Lỗi từ server
+        final error = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error['message'] ?? "Lỗi cập nhật"), backgroundColor: Colors.red)
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Lỗi kết nối: $e"), backgroundColor: Colors.red)
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -64,50 +107,36 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // Bỏ AppBar, dùng Column để tự dựng Header giống màn hình VerifyPinScreen
       body: Column(
         children: [
-          // --- HEADER GIỐNG HỆT MÀN TRÊN ---
+          // --- HEADER ---
           Container(
-            // Padding chuẩn để nút Quay lại nằm đúng vị trí mong muốn
             padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 30),
             width: double.infinity,
             color: kPrimaryColor,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Nút Quay lại
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min, // Chỉ chiếm không gian cần thiết
+                    mainAxisSize: MainAxisSize.min,
                     children: const [
                       Icon(Icons.arrow_back, color: Colors.white),
                       SizedBox(width: 8),
-                      Text("Quay lại", style: TextStyle(color: Colors.white, fontSize: 16)),
+                      Text("Hủy", style: TextStyle(color: Colors.white, fontSize: 16)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Tiêu đề to
-                const Text(
-                  "Đổi mã PIN",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                const Text("Đổi mã PIN", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                const Text(
-                  "Tạo mã PIN mới",
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
+                const Text("Tạo mã PIN an toàn & khẩn cấp mới", style: TextStyle(color: Colors.white70, fontSize: 14)),
               ],
             ),
           ),
 
-          // --- BODY (FORM NHẬP LIỆU) ---
+          // --- BODY ---
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -123,15 +152,15 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
                     borderColor: kSafePinBorder,
                     pinController: _safePin,
                     confirmController: _confirmSafePin,
-                    pinHint: "4 chu so",
-                    confirmHint: "Nhập lại 4 chu so",
+                    pinHint: "4 chữ số",
+                    confirmHint: "Nhập lại 4 chữ số",
                   ),
                   const SizedBox(height: 24),
 
                   // 2. Phần Mã PIN khẩn cấp
                   _buildPinSection(
-                    title: "Mã PIN khẩn cấp mới (Duress PIN)",
-                    description: "Nếu bị ép buộc tắt ứng dụng hãy nhập mã PIN ngầm này để cảnh báo",
+                    title: "Mã PIN khẩn cấp mới (Duress)",
+                    description: "Dùng mã này để kích hoạt cảnh báo ngầm",
                     icon: Icons.warning_amber_rounded,
                     themeColor: kDangerColor,
                     bgColor: kDuressPinBg,
@@ -139,7 +168,7 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
                     pinController: _duressPin,
                     confirmController: _confirmDuressPin,
                     pinLabel: "Mã PIN khẩn cấp",
-                    confirmLabel: "Xác nhận mã PIN khẩn cấp",
+                    confirmLabel: "Xác nhận PIN khẩn cấp",
                     pinHint: "4 chữ số khác",
                     confirmHint: "Nhập lại 4 chữ số",
                   ),
@@ -153,7 +182,7 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
                       children: [
                         Icon(_isObscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Colors.grey),
                         const SizedBox(width: 8),
-                        Text("Hiện mã PIN", style: TextStyle(color: Colors.grey[700], fontSize: 16, fontWeight: FontWeight.w500)),
+                        Text(_isObscure ? "Hiện mã PIN" : "Ẩn mã PIN", style: TextStyle(color: Colors.grey[700], fontSize: 16, fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
@@ -168,20 +197,16 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _isButtonEnabled
-                          ? () {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đổi mã PIN thành công!")));
-                            }
-                          : null,
+                      onPressed: (_isButtonEnabled && !_isLoading) ? _handleUpdatePin : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kPrimaryColor,
                         disabledBackgroundColor: Colors.grey[300],
                         disabledForegroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
                       ),
-                      child: const Text("Lưu thay đổi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: _isLoading 
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text("Lưu thay đổi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -191,52 +216,20 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
           ),
         ],
       ),
-
-      // --- BOTTOM NAVIGATION BAR ---
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.grey.shade200))),
-        child: BottomNavigationBar(
-          currentIndex: 3,
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: kPrimaryColor,
-          unselectedItemColor: Colors.grey,
-          showUnselectedLabels: true,
-          selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          unselectedLabelStyle: const TextStyle(fontSize: 12),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Trang chủ"),
-            BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), label: "Chuyến đi"),
-            BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: "Liên lạc"),
-            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), activeIcon: Icon(Icons.settings), label: "Cài đặt"),
-          ],
-        ),
-      ),
     );
   }
 
-  // --- WIDGETS HỖ TRỢ (GIỮ NGUYÊN) ---
-
+  // --- WIDGETS HỖ TRỢ ---
   Widget _buildPinSection({
-    required String title,
-    required String description,
-    required IconData icon,
-    required Color themeColor,
-    required Color bgColor,
-    required Color borderColor,
-    required TextEditingController pinController,
-    required TextEditingController confirmController,
-    String pinLabel = "Mã PIN mới",
-    String confirmLabel = "Xác nhận mã PIN",
-    required String pinHint,
-    required String confirmHint,
+    required String title, required String description, required IconData icon,
+    required Color themeColor, required Color bgColor, required Color borderColor,
+    required TextEditingController pinController, required TextEditingController confirmController,
+    String pinLabel = "Mã PIN mới", String confirmLabel = "Xác nhận mã PIN",
+    required String pinHint, required String confirmHint,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -265,7 +258,7 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
       controller: controller,
       keyboardType: TextInputType.number,
       maxLength: 4,
-      obscureText: _isObscure, // Đã fix null
+      obscureText: _isObscure,
       style: const TextStyle(fontSize: 16, letterSpacing: 2),
       decoration: InputDecoration(
         hintText: hint,
@@ -293,7 +286,6 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
           const SizedBox(height: 12),
           _buildBulletPoint("Hai mã PIN phải khác nhau hoàn toàn", noteText),
           _buildBulletPoint("Không chia sẻ mã PIN với bất kì ai", noteText),
-          _buildBulletPoint("Ghi nhận mã PIN không thể phục hồi nếu quên", noteText),
         ],
       ),
     );
