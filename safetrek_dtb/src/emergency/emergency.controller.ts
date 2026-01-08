@@ -58,21 +58,13 @@ export class EmergencyController {
   // ==========================================================
   @Post('panic')
   async triggerPanic(
-    @Body()
-    body: {
-      userId: number;
-      lat: number;
-      lng: number;
-      tripId?: number;
-      batteryLevel?: number; // [MỚI] Nhận thêm mức pin
-    },
+    @Body() body: { userId: number; lat: number; lng: number; tripId?: number },
   ) {
     return this.emergencyService.triggerPanicAlert(
       body.userId,
       body.lat,
       body.lng,
-      body.tripId,
-      body.batteryLevel, // Truyền sang service
+      body.tripId, // Truyền thêm tripId vào service
     );
   }
   // ==========================================================
