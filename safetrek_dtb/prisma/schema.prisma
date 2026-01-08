@@ -79,6 +79,9 @@ model Alert {
   userId    Int       @map("user_id")
   tripId    Int?      @map("trip_id")
   alertType AlertType @map("alert_type")
+
+  batteryLevel Int?  @default(0)
+  
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp()
   user      User      @relation(fields: [userId], references: [userId])
   trip      Trip?     @relation(fields: [tripId], references: [tripId])

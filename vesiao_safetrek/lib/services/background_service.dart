@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert'; // [FIX] Import để dùng jsonEncode
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-// [MỚI] Thư viện cảm biến
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:battery_plus/battery_plus.dart'; // [FIX] Import để dùng Battery()
+import 'package:http/http.dart' as http; // [FIX] Import để gọi API
+import '../common/constants.dart'; // [FIX] Import để dùng Constants.baseUrl
 
 Future<void> initializeBackgroundService() async {
   if (kIsWeb) return;
@@ -58,14 +62,13 @@ void onStart(ServiceInstance service) async {
 
   // Lắng nghe cảm biến gia tốc
   accelerometerEvents.listen((AccelerometerEvent event) {
-    // Tính toán độ lớn vector lực tác động
     double acceleration = event.x.abs() + event.y.abs() + event.z.abs();
     
     // Ngưỡng 35 thường tương ứng với một cú gõ mạnh vào thân máy
+    // Nếu quá khó kích hoạt, bạn có thể giảm xuống 25 hoặc 30
     if (acceleration > 35) {
       DateTime now = DateTime.now();
       
-      // Nếu cú gõ tiếp theo cách cú gõ trước dưới 600ms thì tính là liên tiếp
       if (now.difference(lastTapTime).inMilliseconds < 600) {
         tapCount++;
       } else {
@@ -74,7 +77,6 @@ void onStart(ServiceInstance service) async {
       
       lastTapTime = now;
 
-      // Khi gõ đủ 3 lần dồn dập
       if (tapCount >= 3) {
         tapCount = 0; // Reset
         _triggerEmergencyFromBackground(service);
@@ -82,7 +84,6 @@ void onStart(ServiceInstance service) async {
     }
   });
 
-  // --- CÁC LOGIC CŨ GIỮ NGUYÊN ---
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((event) => service.setAsForegroundService());
     service.on('setAsBackground').listen((event) => service.setAsBackgroundService());
@@ -110,20 +111,52 @@ void onStart(ServiceInstance service) async {
 // --- HÀM XỬ LÝ GỬI CỨU HỘ KHI ĐANG CHẠY NGẦM ---
 void _triggerEmergencyFromBackground(ServiceInstance service) async {
   try {
-    // 1. Lấy vị trí ngay lập tức
+    // 1. Lấy UserID từ bộ nhớ đệm
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId');
+
+    if (userId == null) {
+      print("⚠️ Không tìm thấy UserId, không thể gửi API.");
+      return;
+    }
+
+    // 2. Lấy vị trí GPS
     Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     
-    // 2. Cập nhật thông báo khẩn cấp lên thanh trạng thái
+    // 3. Lấy mức Pin hiện tại
+    int batteryLevel = await Battery().batteryLevel;
+
+    // 4. Cập nhật thông báo trên thanh trạng thái
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: "🆘 ĐÃ GỬI SOS KHẨN CẤP",
-        content: "Phát hiện gõ máy 3 lần. Đang báo cho người bảo vệ.",
+        content: "Pin: $batteryLevel%. Đang báo cho người bảo vệ.",
       );
     }
 
-    // 3. In log (Thực tế bạn cần gọi API ở đây, nhưng cần lấy userId từ SharedPreferences)
-    print("🚨 BACKGROUND PANIC SENT: ${position.latitude}, ${position.longitude}");
+    // 5. Gọi API gửi lên Server (Kèm mức Pin)
+    print("🚀 Đang gửi API Panic: User $userId - Pin $batteryLevel%");
+    
+    final url = Uri.parse('${Constants.baseUrl}/emergency/panic');
+    
+    final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "userId": userId,
+          "lat": position.latitude, 
+          "lng": position.longitude,
+          "batteryLevel": batteryLevel, 
+        }),
+    );
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+       print("✅ Gửi thành công!");
+    } else {
+       print("❌ Lỗi Server: ${response.body}");
+    }
+
   } catch (e) {
-    print("Lỗi kích hoạt cứu hộ ngầm: $e");
+    print("❌ Lỗi kích hoạt cứu hộ ngầm: $e");
   }
 }

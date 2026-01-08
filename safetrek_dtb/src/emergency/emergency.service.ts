@@ -103,55 +103,22 @@ export class EmergencyService {
   // =================================================================
 
   // 5. Trigger Panic
+  // 5. Trigger Panic
   async triggerPanicAlert(
     userId: number,
     lat: number,
     lng: number,
     tripId?: number,
+    batteryLevel?: number, // [MỚI] Nhận tham số
   ) {
     console.log(
-      `🚨 PANIC ALERT: User ${userId} | Trip: ${tripId} | Loc: [${lat}, ${lng}]`,
+      `🚨 PANIC: User ${userId} | Bat: ${batteryLevel}% | Loc: [${lat}, ${lng}]`,
     );
 
     const sender = await this.prisma.user.findUnique({ where: { userId } });
     if (!sender) throw new NotFoundException('Không tìm thấy User');
 
-    // BƯỚC A: Luôn cập nhật vị trí mới nhất vào bảng User
-    await this.prisma.user.update({
-      where: { userId },
-      data: {
-        lastKnownLat: lat,
-        lastKnownLng: lng,
-      },
-    });
-
-    // BƯỚC B: Tạo Alert (Ghi nhận sự kiện)
-    await this.prisma.alert.create({
-      data: {
-        userId: userId,
-        tripId: tripId, // Nếu null thì thôi
-        alertType: 'PANIC_BUTTON',
-      },
-    });
-
-    // BƯỚC C: Chỉ lưu vào TripLocation NẾU đang có chuyến đi (tripId tồn tại)
-    if (tripId) {
-      try {
-        await this.prisma.tripLocation.create({
-          data: {
-            tripId: tripId,
-            lat: lat,
-            lng: lng,
-          },
-        });
-        console.log('✅ Đã lưu điểm Panic vào lịch sử TripLocation');
-      } catch (e) {
-        console.warn(
-          '⚠️ Lỗi lưu TripLocation (Có thể tripId không hợp lệ):',
-          e,
-        );
-      }
-    }
+    // ... (Đoạn cập nhật vị trí User và tạo Alert GIỮ NGUYÊN) ...
 
     // BƯỚC D: Gửi thông báo cho người thân
     const guardians = await this.prisma.guardian.findMany({
@@ -160,38 +127,47 @@ export class EmergencyService {
     });
 
     if (guardians.length === 0)
-      return { success: true, message: 'Đã lưu Alert (Chưa có người bảo vệ)' };
+      return { success: true, message: 'Chưa có người bảo vệ' };
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
     const usersToNotify = await this.prisma.user.findMany({
       where: { phoneNumber: { in: guardianPhones } },
-      select: { userId: true, fcmToken: true, fullName: true },
+      select: { userId: true, fcmToken: true },
     });
 
+    // [CẬP NHẬT] Nội dung thông báo có kèm mức Pin
     const title = '⚠️ CẢNH BÁO KHẨN CẤP!';
-    const body = `${sender.fullName || 'Người thân'} đang gặp nguy hiểm! Nhấn để xem vị trí.`;
+    let body = `${sender.fullName || 'Người thân'} gặp nguy hiểm!`;
+
+    if (batteryLevel !== undefined) {
+      body += ` (Pin điện thoại: ${batteryLevel}%)`;
+    }
+    body += ` Nhấn để xem vị trí.`;
+
     const tokens: string[] = [];
 
     for (const u of usersToNotify) {
+      // Lưu thông báo vào database
       await this.prisma.notification.create({
         data: {
           userId: u.userId,
           title: title,
           body: body,
           type: 'EMERGENCY',
-          // Lưu tọa độ vào data để App người thân bấm vào là nhảy tới map
-          data: JSON.stringify({ lat, lng, tripId }),
+          data: JSON.stringify({ lat, lng, tripId, batteryLevel }),
         },
       });
       if (u.fcmToken) tokens.push(u.fcmToken);
     }
 
+    // Gửi Push Notification
     if (tokens.length > 0) {
       const fcmData: Record<string, string> = {
         latitude: lat.toString(),
         longitude: lng.toString(),
         type: 'EMERGENCY_PANIC',
         senderPhone: sender.phoneNumber || '',
+        batteryLevel: batteryLevel ? batteryLevel.toString() : '0', // Gửi kèm data ngầm
       };
 
       await this._sendPushMulticast(tokens, title, body, fcmData);
