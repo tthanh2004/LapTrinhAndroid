@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-// [MỚI] Thư viện cảm biến để nhận diện gõ máy
+// [MỚI] Thư viện cảm biến
 import 'package:sensors_plus/sensors_plus.dart';
 
 Future<void> initializeBackgroundService() async {
@@ -56,7 +56,7 @@ void onStart(ServiceInstance service) async {
   int tapCount = 0;
   DateTime lastTapTime = DateTime.now();
 
-  // Lắng nghe cảm biến gia tốc (Accelerometer)
+  // Lắng nghe cảm biến gia tốc
   accelerometerEvents.listen((AccelerometerEvent event) {
     // Tính toán độ lớn vector lực tác động
     double acceleration = event.x.abs() + event.y.abs() + event.z.abs();
@@ -113,7 +113,7 @@ void _triggerEmergencyFromBackground(ServiceInstance service) async {
     // 1. Lấy vị trí ngay lập tức
     Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     
-    // 2. Cập nhật thông báo khẩn cấp lên thanh trạng thái (Chuẩn Figma)
+    // 2. Cập nhật thông báo khẩn cấp lên thanh trạng thái
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: "🆘 ĐÃ GỬI SOS KHẨN CẤP",
@@ -121,8 +121,7 @@ void _triggerEmergencyFromBackground(ServiceInstance service) async {
       );
     }
 
-    // 3. Tại đây bạn gọi API Panic của mình (Sử dụng http post)
-    // Lưu ý: userId cần được lưu trữ bền vững (SharedPreferences) để lấy ra ở Isolate này
+    // 3. In log (Thực tế bạn cần gọi API ở đây, nhưng cần lấy userId từ SharedPreferences)
     print("🚨 BACKGROUND PANIC SENT: ${position.latitude}, ${position.longitude}");
   } catch (e) {
     print("Lỗi kích hoạt cứu hộ ngầm: $e");
