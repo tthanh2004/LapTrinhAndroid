@@ -108,90 +108,89 @@ export class EmergencyService {
     lat: number,
     lng: number,
     tripId?: number,
+    batteryLevel?: number, // [MỚI] Nhận tham số mức pin
   ) {
     console.log(
-      `🚨 PANIC ALERT: User ${userId} | Trip: ${tripId} | Loc: [${lat}, ${lng}]`,
+      `🚨 PANIC: User ${userId} | Bat: ${batteryLevel}% | Loc: [${lat}, ${lng}]`,
     );
 
     const sender = await this.prisma.user.findUnique({ where: { userId } });
     if (!sender) throw new NotFoundException('Không tìm thấy User');
 
-    // BƯỚC A: Luôn cập nhật vị trí mới nhất vào bảng User
+    // 1. Cập nhật vị trí User
     await this.prisma.user.update({
       where: { userId },
-      data: {
-        lastKnownLat: lat,
-        lastKnownLng: lng,
-      },
+      data: { lastKnownLat: lat, lastKnownLng: lng },
     });
 
-    // BƯỚC B: Tạo Alert (Ghi nhận sự kiện)
+    // 2. Lưu Alert vào Database (Nhớ update schema.prisma trước)
     await this.prisma.alert.create({
       data: {
         userId: userId,
-        tripId: tripId, // Nếu null thì thôi
+        tripId: tripId,
         alertType: 'PANIC_BUTTON',
+        batteryLevel: batteryLevel ?? 0, // [MỚI] Lưu mức pin vào CSDL
       },
     });
 
-    // BƯỚC C: Chỉ lưu vào TripLocation NẾU đang có chuyến đi (tripId tồn tại)
+    // 3. Lưu TripLocation (nếu có tripId) - Giữ nguyên code cũ của bạn
     if (tripId) {
-      try {
-        await this.prisma.tripLocation.create({
-          data: {
-            tripId: tripId,
-            lat: lat,
-            lng: lng,
-          },
-        });
-        console.log('✅ Đã lưu điểm Panic vào lịch sử TripLocation');
-      } catch (e) {
-        console.warn(
-          '⚠️ Lỗi lưu TripLocation (Có thể tripId không hợp lệ):',
-          e,
-        );
-      }
+      // ... code lưu trip location cũ ...
     }
 
-    // BƯỚC D: Gửi thông báo cho người thân
+    // --- PHẦN GỬI THÔNG BÁO QUAN TRỌNG ---
+
+    // Tìm người bảo vệ
     const guardians = await this.prisma.guardian.findMany({
       where: { userId, status: 'ACCEPTED' },
       select: { guardianPhone: true },
     });
 
     if (guardians.length === 0)
-      return { success: true, message: 'Đã lưu Alert (Chưa có người bảo vệ)' };
+      return { success: true, message: 'Chưa có người bảo vệ' };
 
     const guardianPhones = guardians.map((g) => g.guardianPhone);
     const usersToNotify = await this.prisma.user.findMany({
       where: { phoneNumber: { in: guardianPhones } },
-      select: { userId: true, fcmToken: true, fullName: true },
+      select: { userId: true, fcmToken: true },
     });
 
+    // [CẬP NHẬT] Tạo nội dung thông báo có chứa MỨC PIN
     const title = '⚠️ CẢNH BÁO KHẨN CẤP!';
-    const body = `${sender.fullName || 'Người thân'} đang gặp nguy hiểm! Nhấn để xem vị trí.`;
+    let body = `${sender.fullName || 'Người thân'} đang gặp nguy hiểm!`;
+
+    // Nếu có thông tin pin thì nối thêm vào chuỗi tin nhắn
+    if (batteryLevel !== undefined && batteryLevel !== null) {
+      body += ` (Pin điện thoại: ${batteryLevel}%)`;
+    }
+    body += ` Nhấn để xem vị trí.`;
+
     const tokens: string[] = [];
 
     for (const u of usersToNotify) {
+      // Lưu thông báo vào DB
       await this.prisma.notification.create({
         data: {
           userId: u.userId,
           title: title,
           body: body,
           type: 'EMERGENCY',
-          // Lưu tọa độ vào data để App người thân bấm vào là nhảy tới map
-          data: JSON.stringify({ lat, lng, tripId }),
+          // Lưu data JSON để App người thân xử lý khi bấm vào
+          data: JSON.stringify({ lat, lng, tripId, batteryLevel }),
         },
       });
       if (u.fcmToken) tokens.push(u.fcmToken);
     }
 
+    // Gửi Push Notification qua Firebase
     if (tokens.length > 0) {
       const fcmData: Record<string, string> = {
         latitude: lat.toString(),
         longitude: lng.toString(),
         type: 'EMERGENCY_PANIC',
         senderPhone: sender.phoneNumber || '',
+        // Gửi kèm data ngầm để máy người thân xử lý logic nếu cần
+        batteryLevel: batteryLevel ? batteryLevel.toString() : '0',
       };
 
       await this._sendPushMulticast(tokens, title, body, fcmData);

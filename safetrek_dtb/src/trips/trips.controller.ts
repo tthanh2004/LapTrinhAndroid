@@ -27,8 +27,6 @@ export class TripsController {
     return this.tripService.endTripSafe(Number(id), body.status);
   }
 
-  // [ĐÃ XÓA API PANIC TẠI ĐÂY]
-
   @Post('verify-pin')
   async verifyPin(@Body() body: { userId: number; pin: string }) {
     return this.tripService.verifyPin(body.userId, body.pin);
