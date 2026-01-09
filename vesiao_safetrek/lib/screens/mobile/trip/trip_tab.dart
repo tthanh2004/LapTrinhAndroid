@@ -144,7 +144,7 @@ class _TripTabState extends State<TripTab> {
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(color: kDangerLight, borderRadius: BorderRadius.circular(12)),
-                  child: Row(children: const [Icon(Icons.info_outline, size: 16, color: kDangerColor), SizedBox(width: 8), Expanded(child: Text("Nút khẩn cấp sẽ gửi cảnh báo ngay lập tức.", style: TextStyle(color: kDangerColor, fontSize: 13)))]),
+                  child: Row(children: const [Icon(Icons.info_outline, size: 16, color: kDangerColor), SizedBox(width: 8), Expanded(child: Text("Nút khẩn cấp sẽ tự động gửi cảnh báo đến tất cả liên lạc trong danh bạ khẩn cấp.", style: TextStyle(color: kDangerColor, fontSize: 13)))]),
                 ),
                 SizedBox(
                   width: double.infinity,
