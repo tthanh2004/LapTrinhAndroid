@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException, // [MỚI]
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
@@ -24,13 +25,13 @@ export class AuthService {
   // --- LOGIC ĐĂNG KÝ GỘP ---
   async register(body: {
     phoneNumber: string;
-    passwordHash: string; // [SỬA] Đổi tên cho khớp Controller
+    passwordHash: string;
     fullName: string;
     email?: string;
-    safePinHash: string; // [SỬA] Đổi tên cho khớp Controller
-    duressPinHash: string; // [SỬA] Đổi tên cho khớp Controller
+    safePinHash: string;
+    duressPinHash: string;
   }) {
-    // 1. Validate (Dùng tên biến mới)
+    // 1. Validate
     if (
       !body.phoneNumber ||
       !body.passwordHash ||
@@ -43,45 +44,48 @@ export class AuthService {
       throw new BadRequestException('Hai mã PIN không được trùng nhau.');
     }
 
-    // 2. Kiểm tra trùng lặp
+    const validEmail =
+      body.email && body.email.trim() !== '' ? body.email.trim() : undefined;
+
+    // 2. Kiểm tra trùng lặp SĐT
     const existingUser = await this.prisma.user.findUnique({
       where: { phoneNumber: body.phoneNumber },
     });
     if (existingUser)
       throw new BadRequestException('Số điện thoại đã được đăng ký.');
 
-    if (body.email) {
+    // 3. Kiểm tra trùng lặp Email
+    if (validEmail) {
       const existingEmail = await this.prisma.user.findUnique({
-        where: { email: body.email },
+        where: { email: validEmail },
       });
       if (existingEmail)
         throw new BadRequestException('Email đã được sử dụng.');
     }
 
-    // 3. Mã hóa dữ liệu (Lấy dữ liệu từ biến ...Hash để băm)
+    // 4. Mã hóa dữ liệu
     const [finalPasswordHash, finalSafePinHash, finalDuressPinHash] =
       await Promise.all([
-        this.hashData(body.passwordHash), // Hash mật khẩu
-        this.hashData(body.safePinHash), // Hash Safe PIN
-        this.hashData(body.duressPinHash), // Hash Duress PIN
+        this.hashData(body.passwordHash),
+        this.hashData(body.safePinHash),
+        this.hashData(body.duressPinHash),
       ]);
 
-    // 4. Lưu vào DB
+    // 5. Lưu vào DB
     const newUser = await this.prisma.user.create({
       data: {
         phoneNumber: body.phoneNumber,
         fullName: body.fullName,
-        email: body.email,
-        passwordHash: finalPasswordHash, // Lưu kết quả đã hash
-        safePinHash: finalSafePinHash, // Lưu kết quả đã hash
-        duressPinHash: finalDuressPinHash, // Lưu kết quả đã hash
+        email: validEmail,
+        passwordHash: finalPasswordHash,
+        safePinHash: finalSafePinHash,
+        duressPinHash: finalDuressPinHash,
       },
     });
 
     return { message: 'Đăng ký thành công', userId: newUser.userId };
   }
 
-  // ... (Giữ nguyên các hàm verifySafePin và loginWithPassword)
   async verifySafePin(userId: number, pin: string) {
     const user = await this.prisma.user.findUnique({ where: { userId } });
     if (!user || !user.safePinHash)
@@ -108,6 +112,83 @@ export class AuthService {
         phoneNumber: user.phoneNumber,
         email: user.email,
         avatarUrl: user.avatarUrl,
+      },
+    };
+  }
+
+  // [MỚI] Lấy thông tin User Profile
+  async getUserProfile(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { userId },
+      select: {
+        userId: true,
+        fullName: true,
+        phoneNumber: true,
+        email: true,
+        avatarUrl: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  // [MỚI] Cập nhật FCM Token
+  async updateFcmToken(userId: number, token: string) {
+    return this.prisma.user.update({
+      where: { userId },
+      data: { fcmToken: token },
+    });
+  }
+  async updatePins(userId: number, safePin: string, duressPin: string) {
+    // 1. Hash 2 mã PIN mới
+    const safePinHash = await this.hashData(safePin);
+    const duressPinHash = await this.hashData(duressPin);
+
+    // 2. Cập nhật vào DB
+    await this.prisma.user.update({
+      where: { userId: userId },
+      data: {
+        safePinHash: safePinHash,
+        duressPinHash: duressPinHash,
+      },
+    });
+
+    return { success: true, message: 'Đổi mã PIN thành công' };
+  }
+
+  async updateProfile(
+    userId: number,
+    data: { fullName?: string; email?: string },
+  ) {
+    // 1. Kiểm tra user tồn tại
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (!user) throw new NotFoundException('Người dùng không tồn tại');
+
+    // 2. Nếu có cập nhật email, kiểm tra xem email mới có bị trùng với người khác không
+    if (data.email && data.email !== user.email) {
+      const emailExists = await this.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (emailExists) {
+        throw new BadRequestException('Email này đã được người khác sử dụng.');
+      }
+    }
+
+    // 3. Tiến hành cập nhật
+    const updatedUser = await this.prisma.user.update({
+      where: { userId },
+      data: {
+        fullName: data.fullName,
+        email: data.email,
+      },
+    });
+
+    return {
+      message: 'Cập nhật thành công',
+      user: {
+        userId: updatedUser.userId,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
       },
     };
   }

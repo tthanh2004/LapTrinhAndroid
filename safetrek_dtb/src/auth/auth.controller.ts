@@ -1,4 +1,12 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -10,11 +18,11 @@ export class AuthController {
     @Body()
     body: {
       phoneNumber: string;
-      passwordHash: string; // [ĐÃ KHỚP]
+      passwordHash: string;
       fullName: string;
       email?: string;
-      safePinHash: string; // [ĐÃ KHỚP]
-      duressPinHash: string; // [ĐÃ KHỚP]
+      safePinHash: string;
+      duressPinHash: string;
     },
   ) {
     return this.authService.register(body);
@@ -28,5 +36,36 @@ export class AuthController {
   @Post('login')
   async login(@Body() body: { identity: string; password: string }) {
     return this.authService.loginWithPassword(body.identity, body.password);
+  }
+
+  // [MỚI] Lấy thông tin User (Profile)
+  @Get('profile/:id')
+  async getProfile(@Param('id', ParseIntPipe) id: number) {
+    return this.authService.getUserProfile(id);
+  }
+
+  // [MỚI] Cập nhật FCM Token
+  @Patch('fcm-token')
+  async updateFcmToken(@Body() body: { userId: number; token: string }) {
+    return this.authService.updateFcmToken(body.userId, body.token);
+  }
+
+  @Post('update-pins')
+  async updatePins(
+    @Body() body: { userId: number; safePin: string; duressPin: string },
+  ) {
+    return this.authService.updatePins(
+      body.userId,
+      body.safePin,
+      body.duressPin,
+    );
+  }
+
+  @Patch('profile/:id')
+  async updateProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { fullName?: string; email?: string },
+  ) {
+    return this.authService.updateProfile(id, body);
   }
 }

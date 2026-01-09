@@ -78,5 +78,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'safetrek-f7149.firebasestorage.app',
     iosBundleId: 'com.example.vesiaoSafetrek',
   );
-
 }
