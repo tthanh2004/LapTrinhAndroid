@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../services/guardian_service.dart';
-import 'protected_list_screen.dart'; // [QUAN TRỌNG] Import màn hình danh sách người được bảo vệ
+import 'protected_list_screen.dart'; // Đảm bảo bạn đã có file này
 
 class ContactsTab extends StatefulWidget {
   final int userId;
@@ -43,7 +43,9 @@ class _ContactsTabState extends State<ContactsTab> {
 
     if (name.isNotEmpty && phone.length >= 10) {
       if (_contacts.length >= 5) {
-        _showSnackBar("Tối đa 5 người bảo vệ", Colors.orange);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Tối đa 5 người bảo vệ"), backgroundColor: Colors.orange),
+        );
         return;
       }
 
@@ -53,9 +55,19 @@ class _ContactsTabState extends State<ContactsTab> {
         _phoneController.clear();
         if (mounted) Navigator.pop(context);
         _loadGuardians();
-        _showSnackBar("Đã gửi lời mời thành công", Colors.green);
+        
+        // [MỚI] Hiển thị thông báo đẹp chuẩn Figma
+        if (mounted) {
+          showCustomSnackBar(
+            context, 
+            title: "Đã gửi lời mời thành công", 
+            message: "Người bảo vệ sẽ nhận được thông báo."
+          );
+        }
       } else {
-        _showSnackBar("Lỗi thêm người bảo vệ", Colors.red);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Lỗi thêm người bảo vệ"), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -64,12 +76,15 @@ class _ContactsTabState extends State<ContactsTab> {
     bool success = await _guardianService.deleteGuardian(id);
     if (success) {
       _loadGuardians();
-      _showSnackBar("Đã xóa người bảo vệ", Colors.grey);
+      // [MỚI] Hiển thị thông báo đẹp chuẩn Figma
+      if (mounted) {
+        showCustomSnackBar(
+          context, 
+          title: "Đã xóa người bảo vệ", 
+          message: "Danh bạ khẩn cấp đã được cập nhật."
+        );
+      }
     }
-  }
-
-  void _showSnackBar(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   @override
@@ -102,7 +117,7 @@ class _ContactsTabState extends State<ContactsTab> {
 
                         const SizedBox(height: 30),
                         
-                        // [MỚI] Nút xem danh sách người ĐANG BẢO VỆ (Màu nhạt)
+                        // Nút xem danh sách người ĐANG BẢO VỆ (Màu nhạt)
                         _buildViewProtectedListButton(),
 
                         const SizedBox(height: 16),
@@ -120,7 +135,7 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- WIDGETS ---
+  // --- WIDGETS GIAO DIỆN ---
 
   Widget _buildBlueHeader() {
     return Container(
@@ -271,7 +286,6 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // [MỚI] Nút chuyển sang màn hình danh sách người mình đang bảo vệ
   Widget _buildViewProtectedListButton() {
     return SizedBox(
       width: double.infinity,
@@ -293,7 +307,7 @@ class _ContactsTabState extends State<ContactsTab> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
-            Icon(Icons.shield_outlined), // Icon khiên/bảo vệ
+            Icon(Icons.shield_outlined),
             SizedBox(width: 8),
             Text(
               "Danh sách người được bảo vệ",
@@ -345,7 +359,7 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- MODAL & DIALOGS ---
+  // --- MODALS & DIALOGS ---
 
   void _showAddModal(BuildContext context) {
     showModalBottomSheet(
@@ -414,7 +428,6 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- MODAL XÁC NHẬN XÓA CHUẨN FIGMA (image_a51a68.png) ---
   void _showDeleteConfirmDialog(int id) {
     showDialog(
       context: context,
@@ -425,7 +438,6 @@ class _ContactsTabState extends State<ContactsTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Icon thùng rác đỏ trong vòng tròn xanh nhạt
               Container(
                 width: 60,
                 height: 60,
@@ -436,43 +448,32 @@ class _ContactsTabState extends State<ContactsTab> {
                 child: const Icon(Icons.delete, color: Color(0xFFEF4444), size: 30),
               ),
               const SizedBox(height: 20),
-              
-              // Tiêu đề
               const Text(
                 "Xóa người bảo vệ?",
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B), // Slate 900
+                  color: Color(0xFF1E293B),
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              
-              // Nội dung căn giữa
               const Text(
                 "Bạn có muốn xóa người bảo vệ này không?",
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF64748B), // Slate 500
-                  height: 1.5,
-                ),
+                style: TextStyle(fontSize: 15, color: Color(0xFF64748B), height: 1.5),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 28),
-              
-              // Hàng nút bấm
               Row(
                 children: [
-                  // Nút "Không" màu nhạt
                   Expanded(
                     child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFF7ED), // Orange 50 (nhạt gần như trắng)
-                          foregroundColor: const Color(0xFF475569), // Slate 600
+                          backgroundColor: const Color(0xFFFFF7ED), 
+                          foregroundColor: const Color(0xFF475569), 
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
@@ -481,7 +482,6 @@ class _ContactsTabState extends State<ContactsTab> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Nút "Có" màu đỏ chuẩn
                   Expanded(
                     child: SizedBox(
                       height: 50,
@@ -491,7 +491,7 @@ class _ContactsTabState extends State<ContactsTab> {
                           _performDelete(id);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF4444), // Red 500
+                          backgroundColor: const Color(0xFFEF4444), 
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -508,4 +508,104 @@ class _ContactsTabState extends State<ContactsTab> {
       ),
     );
   }
+}
+
+// --- WIDGET CUSTOM SNACKBAR (Bạn có thể tách ra file riêng hoặc để ở đây) ---
+class CustomSnackBar extends StatelessWidget {
+  final String title;
+  final String message;
+  final bool isSuccess;
+  final VoidCallback? onClose;
+
+  const CustomSnackBar({
+    super.key,
+    required this.title,
+    required this.message,
+    this.isSuccess = true,
+    this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10B981), // Màu xanh lá chuẩn Figma (Green 500)
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon check tròn trắng
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, color: Color(0xFF10B981), size: 14),
+          ),
+          const SizedBox(width: 12),
+          
+          // Nội dung text
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Nút X đóng
+          if (onClose != null)
+            GestureDetector(
+              onTap: onClose,
+              child: const Icon(Icons.close, color: Colors.white, size: 18),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// Hàm tiện ích để gọi nhanh SnackBar này
+void showCustomSnackBar(BuildContext context, {required String title, required String message}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: CustomSnackBar(title: title, message: message),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.only(
+        bottom: MediaQuery.of(context).size.height - 160, // Hiển thị ở trên cùng (cách top một khoảng)
+        left: 16,
+        right: 16,
+      ),
+      duration: const Duration(seconds: 3),
+    ),
+  );
 }

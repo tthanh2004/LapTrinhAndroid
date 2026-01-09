@@ -74,7 +74,7 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
                   child: Row(children: const [Icon(Icons.arrow_back, color: Colors.white), SizedBox(width: 8), Text("Quay lại", style: TextStyle(color: Colors.white, fontSize: 16))])
                 ),
                 const SizedBox(height: 20),
-                const Text("Xác thực PIN cũ", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                const Text("Xác thực mã PIN", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
