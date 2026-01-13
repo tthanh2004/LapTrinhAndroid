@@ -35,15 +35,30 @@ class _ProtectedListScreenState extends State<ProtectedListScreen> {
   // Xử lý Chấp nhận/Từ chối
   Future<void> _handleResponse(int guardianId, bool accept) async {
     bool success = await _guardianService.respondToRequest(guardianId, accept);
+    
     if (success) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(accept ? "Đã chấp nhận bảo vệ" : "Đã từ chối"),
+          content: Text(accept ? "Đã chấp nhận" : "Đã từ chối"),
           backgroundColor: accept ? Colors.green : Colors.grey,
         ),
       );
-      // [QUAN TRỌNG] Gọi lại hàm load data để cập nhật UI ngay lập tức
-      _loadData(); 
+
+      // 2. CẬP NHẬT UI CỤC BỘ (Không reload server)
+      setState(() {
+        // Tìm người vừa thao tác trong danh sách
+        final index = _protectedPeople.indexWhere((item) => item['guardianId'] == guardianId);
+        if (index != -1) {
+          if (accept) {
+            // Nếu chấp nhận -> Đổi trạng thái thành ACCEPTED để hiện icon xanh
+            _protectedPeople[index]['status'] = 'ACCEPTED';
+          } else {
+            // Nếu từ chối -> Xóa luôn khỏi danh sách
+            _protectedPeople.removeAt(index);
+          }
+        }
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Có lỗi xảy ra, vui lòng thử lại"), backgroundColor: Colors.red),

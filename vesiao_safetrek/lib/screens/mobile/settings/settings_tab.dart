@@ -210,7 +210,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     bgColor: Colors.blue[50]!,
                     title: "Mã PIN",
                     subtitle: "Đổi mã PIN an toàn & khẩn cấp",
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => VerifyPinScreen(userId: widget.userId, userName: _userProfile?['fullName'] ?? "User"))),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => VerifyPinScreen(userId: widget.userId, userName: _userProfile?.fullName ?? "User"))),
                   ),
                 ]),
 

@@ -34,9 +34,9 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     final profile = await _userService.getUserProfile(widget.userId);
     if (mounted && profile != null) {
       setState(() {
-        _nameController.text = profile['fullName'] ?? "";
-        _emailController.text = profile['email'] ?? "";
-        _phoneController.text = profile['phoneNumber'] ?? "";
+        _nameController.text = profile.fullName ?? ""; 
+        _emailController.text = profile.email ?? "";
+        _phoneController.text = profile.phoneNumber ?? "";
         _isLoading = false;
       });
     }
