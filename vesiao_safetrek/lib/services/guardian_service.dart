@@ -74,12 +74,11 @@ class GuardianService {
   // [MỚI] Phản hồi lời mời (Chấp nhận/Từ chối) - Dùng lại API đã làm ở phần Thông báo
   Future<bool> respondToRequest(int guardianId, bool accept) async {
     try {
-      final response = await http.post(
-        Uri.parse('${Constants.baseUrl}/emergency/guardians/respond'),
+      final response = await http.patch( 
+        Uri.parse('${Constants.baseUrl}/emergency/guardians/$guardianId/respond'), 
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'guardianId': guardianId,
-          'status': accept ? 'ACCEPTED' : 'REJECTED'
+          'status': accept ? 'ACCEPTED' : 'REJECTED' 
         }),
       );
       return response.statusCode == 200 || response.statusCode == 201;

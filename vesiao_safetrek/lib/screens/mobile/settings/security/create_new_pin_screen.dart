@@ -51,8 +51,8 @@ class _CreateNewPinScreenState extends State<CreateNewPinScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
-        Uri.parse('${Constants.baseUrl}/auth/update-pins'),
+      final response = await http.patch( // 1. Đổi sang PATCH
+        Uri.parse('${Constants.baseUrl}/auth/pins'), // 2. URL ngắn gọn hơn
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'userId': widget.userId,

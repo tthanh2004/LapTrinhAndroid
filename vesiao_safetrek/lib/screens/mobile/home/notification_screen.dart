@@ -35,7 +35,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _markAllAsRead() async {
     try {
-      await http.post(
+      await http.patch( // 1. Đổi sang PATCH
         Uri.parse('${Constants.baseUrl}/emergency/notifications/read-all'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'userId': widget.userId}),
