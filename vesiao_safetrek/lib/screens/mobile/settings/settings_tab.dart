@@ -38,8 +38,6 @@ class _SettingsTabState extends State<SettingsTab> {
     _checkStatus();
   }
 
-  // ... (Các hàm _loadUserData, _checkStatus, _toggleBackgroundMode giữ nguyên)
-
   Future<void> _loadUserData() async {
     final profile = await _userService.getUserProfile(widget.userId);
     if (mounted) {
@@ -67,6 +65,8 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _toggleBackgroundMode(bool value) async {
+    setState(() => _backgroundMode = value); 
+
     final service = FlutterBackgroundService();
     if (value) {
       await service.startService();

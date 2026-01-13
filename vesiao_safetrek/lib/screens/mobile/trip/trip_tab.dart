@@ -27,9 +27,9 @@ class _TripTabState extends State<TripTab> {
     super.dispose();
   }
 
-  // --- HÀM XỬ LÝ NÚT HOẢNG LOẠN (ĐÃ CẬP NHẬT THEO YÊU CẦU) ---
+  // --- HÀM XỬ LÝ NÚT HOẢNG LOẠN ---
   Future<void> _handlePanicButton() async {
-    // 1. Hiển thị Modal trạng thái đang gửi đè lên màn hình
+    // 1. Hiển thị Modal trạng thái đang gửi
     setState(() {
       _showPanicAlert = true;
       _isSending = true;
@@ -130,7 +130,11 @@ class _TripTabState extends State<TripTab> {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      controller.startTrip(userId: widget.userId, destinationName: _destController.text.isEmpty ? null : _destController.text);
+                      // [LOGIC] Gửi tên điểm đến vào Controller
+                      controller.startTrip(
+                        userId: widget.userId, 
+                        destinationName: _destController.text.isEmpty ? null : _destController.text
+                      );
                     },
                     icon: const Icon(Icons.shield, size: 20),
                     label: const Text("Bắt đầu giám sát", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -163,7 +167,16 @@ class _TripTabState extends State<TripTab> {
   Widget _buildActiveView(BuildContext context, TripController controller) {
     return Column(
       children: [
-        _buildHeader(title: "Đang giám sát", subtitle: _destController.text.isNotEmpty ? _destController.text : "Đang di chuyển", icon: Icons.shield_outlined, showAvatar: true),
+        // [SỬA LỖI HIỂN THỊ] Dùng controller.currentDestination
+        _buildHeader(
+          title: "Đang giám sát", 
+          subtitle: (controller.currentDestination != null && controller.currentDestination!.isNotEmpty) 
+              ? "Đến: ${controller.currentDestination}" 
+              : "Đang di chuyển", 
+          icon: Icons.shield_outlined, 
+          showAvatar: true
+        ),
+        
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),

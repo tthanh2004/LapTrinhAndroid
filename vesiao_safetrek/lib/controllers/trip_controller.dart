@@ -18,6 +18,9 @@ class TripController extends ChangeNotifier {
   String formattedTime = "15:00";
   int? currentTripId;
   int _pinErrorCount = 0;
+  
+  // [MỚI] Lưu trữ điểm đến để hiển thị khi màn hình Rebuild
+  String? currentDestination; 
 
   // Set thời gian trước khi đi
   void setDuration(int minutes) {
@@ -35,6 +38,8 @@ class TripController extends ChangeNotifier {
     _pinErrorCount = 0;
     _remainingSeconds = selectedMinutes * 60;
     progress = 1.0;
+    currentDestination = destinationName; // [MỚI] Lưu lại điểm đến
+    
     notifyListeners();
     _startTimer(userId); // Truyền userId vào để dùng khi hết giờ
 
@@ -54,6 +59,7 @@ class TripController extends ChangeNotifier {
   // Kết thúc chuyến đi (An toàn hoặc Bị ép buộc)
   Future<void> stopTrip({required bool isSafe}) async {
     isMonitoring = false;
+    currentDestination = null; // [MỚI] Reset điểm đến
     _timer?.cancel();
     notifyListeners();
 
