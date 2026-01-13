@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http; // Chỉ dùng cho fetchUnread tạm thời nếu chưa chuyển sang NotificationService hoàn toàn
+import 'package:http/http.dart' as http; 
 
 import '../../../../common/constants.dart';
-import '../../../../services/user_service.dart';
 import '../../../../services/emergency_service.dart';
+// Import FcmService để khởi tạo nhận tin nhắn
+import '../../../../services/fcm_service.dart'; 
 import 'notification_screen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -28,65 +28,28 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   // --- STATE ---
   bool _showPanicAlert = false;
-  bool _isPressing = false; // Hiệu ứng nút lún xuống
+  bool _isPressing = false; 
   bool _isSending = false;
   int _unreadCount = 0;
 
   // --- SERVICES ---
-  final UserService _userService = UserService();
+  // Đã xóa _userService vì FcmService đã lo việc update token
   final EmergencyService _emergencyService = EmergencyService();
 
   @override
   void initState() {
     super.initState();
-    _initFCM();
+    
+    // [FIX] Khởi tạo FCM Service đúng chỗ
+    FcmService().init(widget.userId);
+    
+    // Lấy số lượng thông báo
     _fetchUnreadCount();
   }
 
-  // 1. Cấu hình FCM & Lắng nghe thông báo Realtime
-  void _initFCM() async {
-    // Xin quyền
-    NotificationSettings settings = await FirebaseMessaging.instance.requestPermission();
-    
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // Lấy token & Cập nhật lên server
-      String? token = await FirebaseMessaging.instance.getToken();
-      if (token != null) {
-        print("📲 FCM Token: $token");
-        await _userService.updateFcmToken(widget.userId, token);
-      }
-
-      // Lắng nghe khi có tin nhắn đến (Lúc đang mở App)
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        print("🔔 Có thông báo mới: ${message.notification?.title}");
-        
-        // Cập nhật số lượng badge ngay lập tức
-        _fetchUnreadCount();
-        
-        // Hiện thông báo nhỏ bên dưới (SnackBar)
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message.notification?.title ?? "Bạn có thông báo mới"),
-              backgroundColor: const Color(0xFF2563EB),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 3),
-              action: SnackBarAction(
-                label: "Xem",
-                textColor: Colors.white,
-                onPressed: () => _navigateToNotification(),
-              ),
-            )
-          );
-        }
-      });
-    }
-  }
-
-  // 2. Lấy số lượng thông báo chưa đọc
+  // Lấy số lượng thông báo chưa đọc
   Future<void> _fetchUnreadCount() async {
     try {
-      // Có thể chuyển hàm này sang NotificationService sau này
       final response = await http.get(
         Uri.parse('${Constants.baseUrl}/emergency/notifications/unread/${widget.userId}'),
       );
@@ -99,7 +62,7 @@ class _HomeTabState extends State<HomeTab> {
     } catch (_) {}
   }
 
-  // 3. Xử lý nút SOS (Dùng Service chuẩn MVC)
+  // Xử lý nút SOS
   Future<void> _handlePanicButton() async {
     setState(() {
       _showPanicAlert = true;
@@ -107,14 +70,12 @@ class _HomeTabState extends State<HomeTab> {
     });
 
     try {
-      // Gọi Service (đã bao gồm logic lấy GPS bên trong)
       await _emergencyService.sendEmergencyAlert(widget.userId);
     } catch (e) {
       print("Lỗi gửi SOS: $e");
     } finally {
       if (mounted) setState(() => _isSending = false);
       
-      // Tự động đóng modal sau 3 giây
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) setState(() => _showPanicAlert = false);
       });
@@ -126,17 +87,15 @@ class _HomeTabState extends State<HomeTab> {
       context, 
       MaterialPageRoute(builder: (context) => NotificationScreen(userId: widget.userId))
     );
-    _fetchUnreadCount(); // Load lại số lượng sau khi xem
+    _fetchUnreadCount(); 
   }
 
   // --- UI COMPONENTS ---
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Gradient
           Container(
             width: double.infinity, 
             height: double.infinity,
@@ -171,7 +130,7 @@ class _HomeTabState extends State<HomeTab> {
                             text: "Quản lý danh bạ khẩn cấp", 
                             onTap: widget.onGoToContacts
                           ),
-                          const SizedBox(height: 40), // Padding bottom
+                          const SizedBox(height: 40),
                         ],
                       ),
                     ),
@@ -180,8 +139,6 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ),
-          
-          // Modal cảnh báo đè lên trên cùng
           if (_showPanicAlert) _buildPanicModal(),
         ],
       ),
@@ -200,8 +157,6 @@ class _HomeTabState extends State<HomeTab> {
             Text("Vệ Sĩ Ảo của bạn", style: TextStyle(color: Colors.blue[100], fontSize: 14)),
           ]),
           const Spacer(),
-          
-          // Nút thông báo có Badge
           GestureDetector(
             onTap: _navigateToNotification,
             child: Stack(
