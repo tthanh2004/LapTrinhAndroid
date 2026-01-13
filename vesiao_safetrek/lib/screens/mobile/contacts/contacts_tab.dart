@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../services/guardian_service.dart';
-import 'protected_list_screen.dart'; // Đảm bảo bạn đã có file này
+// [IMPORTANT] Import the Guardian model so Dart knows what the 'Guardian' type is
+import '../../../../models/guardian_model.dart'; 
+import 'protected_list_screen.dart'; 
 
 class ContactsTab extends StatefulWidget {
   final int userId;
@@ -15,11 +17,12 @@ class ContactsTab extends StatefulWidget {
 class _ContactsTabState extends State<ContactsTab> {
   final GuardianService _guardianService = GuardianService();
   
-  // Controller cho Modal thêm người bảo vệ
+  // Controller for Add Guardian Modal
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
-  List<dynamic> _contacts = [];
+  // [FIX 1] Change List<dynamic> to List<Guardian> to enforce type safety
+  List<Guardian> _contacts = []; 
   bool _isLoading = true;
 
   @override
@@ -35,11 +38,14 @@ class _ContactsTabState extends State<ContactsTab> {
     super.dispose();
   }
 
-  // 1. Tải danh sách người bảo vệ
+  // 1. Load guardians list
   Future<void> _loadGuardians() async {
-    // Chỉ hiện loading lần đầu, các lần sau refresh ngầm
-    if (_contacts.isEmpty) setState(() => _isLoading = true);
+    // Only show loading indicator on initial load or if list is empty
+    if (_contacts.isEmpty) {
+        if(mounted) setState(() => _isLoading = true);
+    }
     
+    // The service now returns List<Guardian> objects
     final data = await _guardianService.fetchGuardians(widget.userId);
     
     if (mounted) {
@@ -50,12 +56,12 @@ class _ContactsTabState extends State<ContactsTab> {
     }
   }
 
-  // 2. Thêm người bảo vệ (Gửi lời mời)
+  // 2. Add Guardian (Send Request)
   void _addContact() async {
     String name = _nameController.text.trim();
     String phone = _phoneController.text.trim();
 
-    // Validate đầu vào
+    // Input Validation
     if (name.isEmpty) {
       _showError("Vui lòng nhập tên người bảo vệ");
       return;
@@ -65,27 +71,27 @@ class _ContactsTabState extends State<ContactsTab> {
       return;
     }
     
-    // Giới hạn tối đa 5 người
+    // Limit to 5 guardians
     if (_contacts.length >= 5) {
       _showError("Tối đa 5 người bảo vệ. Hãy xóa bớt trước.");
       return;
     }
 
-    // Đóng Modal trước khi gọi API để tránh lag UI
+    // Close modal before calling API to prevent UI lag
     Navigator.pop(context); 
     
-    // Hiển thị loading tạm thời
+    // Show temporary loading snackbar
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Đang gửi lời mời..."), duration: Duration(seconds: 1)),
     );
 
-    // Gọi API
+    // Call API
     bool success = await _guardianService.addGuardian(widget.userId, name, phone);
     
     if (success) {
       _nameController.clear();
       _phoneController.clear();
-      _loadGuardians(); // Reload lại danh sách
+      _loadGuardians(); // Reload list
       
       if (mounted) {
         showCustomSnackBar(
@@ -99,13 +105,13 @@ class _ContactsTabState extends State<ContactsTab> {
     }
   }
 
-  // 3. Xóa người bảo vệ
+  // 3. Delete Guardian
   void _performDelete(int id) async {
-    // Gọi API Xóa
+    // Call API Delete
     bool success = await _guardianService.deleteGuardian(id);
     
     if (success) {
-      _loadGuardians(); // Reload danh sách
+      _loadGuardians(); // Reload list
       if (mounted) {
         showCustomSnackBar(
           context, 
@@ -132,10 +138,10 @@ class _ContactsTabState extends State<ContactsTab> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Header Xanh
+          // Blue Header
           _buildBlueHeader(),
           
-          // Nội dung chính
+          // Main Content
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -147,19 +153,20 @@ class _ContactsTabState extends State<ContactsTab> {
                         _buildInfoBox(),
                         const SizedBox(height: 20),
 
-                        // Danh sách
+                        // Contact List
                         if (_contacts.isEmpty)
                           _buildEmptyState()
                         else
+                          // [FIX 2] Pass the Guardian object directly
                           ..._contacts.map((contact) => _buildContactCard(contact)),
 
                         const SizedBox(height: 30),
                         
-                        // Các nút chức năng phụ
+                        // Auxiliary Buttons
                         _buildViewProtectedListButton(),
                         const SizedBox(height: 16),
                         _buildAddButton(),
-                        const SizedBox(height: 40), // Padding bottom
+                        const SizedBox(height: 40), // Bottom padding
                       ],
                     ),
                   ),
@@ -169,7 +176,7 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  // --- WIDGETS GIAO DIỆN ---
+  // --- UI WIDGETS ---
 
   Widget _buildBlueHeader() {
     return Container(
@@ -180,7 +187,7 @@ class _ContactsTabState extends State<ContactsTab> {
         left: 20,
         right: 20,
       ),
-      color: const Color(0xFF2563EB), // Màu xanh Royal Blue
+      color: const Color(0xFF2563EB), // Royal Blue
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -234,15 +241,17 @@ class _ContactsTabState extends State<ContactsTab> {
     );
   }
 
-  Widget _buildContactCard(dynamic contact) {
-    // Xử lý dữ liệu an toàn (tránh null)
-    // Tùy backend trả về 'name' hay 'guardianName'
-    String name = contact['name'] ?? contact['guardianName'] ?? "Không tên";
-    String phone = contact['phone'] ?? contact['guardianPhone'] ?? "";
-    String status = contact['status'] ?? "PENDING";
+  // [FIX 3] Accept Guardian object instead of dynamic
+  Widget _buildContactCard(Guardian contact) {
+    // [FIX 4] Use dot notation (.) instead of brackets ['']
+    // Ensure these property names match your Guardian model exactly
+    String name = contact.name.isNotEmpty ? contact.name : "Không tên";
+    String phone = contact.phone.isNotEmpty ? contact.phone : "";
     
-    // ID dùng để xóa
-    int id = contact['id'] ?? contact['guardianId'] ?? 0;
+    // Check your model for the exact property name for status/id
+    // Assuming standard naming based on previous context:
+    String status = contact.status; 
+    int id = contact.id; 
 
     bool isAccepted = status == 'ACCEPTED';
     String firstLetter = name.isNotEmpty ? name[0].toUpperCase() : "?";
@@ -287,7 +296,7 @@ class _ContactsTabState extends State<ContactsTab> {
                 ),
                 const SizedBox(height: 6),
                 
-                // Trạng thái
+                // Status Indicator
                 if (isAccepted)
                   Row(
                     children: const [
@@ -308,7 +317,7 @@ class _ContactsTabState extends State<ContactsTab> {
             ),
           ),
           
-          // Nút Xóa
+          // Delete Button
           IconButton(
             onPressed: () => _showDeleteConfirmDialog(id),
             icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
@@ -478,7 +487,7 @@ class _ContactsTabState extends State<ContactsTab> {
   }
 }
 
-// --- CLASS CUSTOM SNACKBAR (Để đảm bảo chạy được ngay cả khi không có file utils) ---
+// --- CLASS CUSTOM SNACKBAR ---
 class CustomSnackBar extends StatelessWidget {
   final String title;
   final String message;
@@ -525,7 +534,7 @@ class CustomSnackBar extends StatelessWidget {
   }
 }
 
-// Hàm helper
+// Helper function
 void showCustomSnackBar(BuildContext context, {required String title, required String message}) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
