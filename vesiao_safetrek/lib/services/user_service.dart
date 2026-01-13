@@ -1,16 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../common/constants.dart';
+import '../models/user_model.dart';
 
 class UserService {
   // Lấy thông tin user
-  Future<Map<String, dynamic>?> getUserProfile(int userId) async {
+  Future<User?> getUserProfile(int userId) async {
     try {
       final response = await http.get(
         Uri.parse('${Constants.baseUrl}/auth/profile/$userId'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        // Trả về đối tượng User
+        return User.fromJson(jsonDecode(response.body));
       }
     } catch (e) {
       print("Lỗi lấy profile: $e");

@@ -36,7 +36,7 @@ Future<void> initializeBackgroundService() async {
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
-      autoStart: true, // [SỬA] Đặt thành true để tự chạy khi mở app
+      autoStart: false,  
       isForegroundMode: true,
       notificationChannelId: 'my_foreground',
       initialNotificationTitle: 'SafeTrek đang hoạt động',

@@ -9,6 +9,7 @@ import '../../../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import './profile/personal_info_screen.dart';
 import './security/verify_pin_screen.dart';
+import '../../../../models/user_model.dart';
 
 class SettingsTab extends StatefulWidget {
   final int userId; 
@@ -23,7 +24,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _backgroundMode = false;
   bool _notifications = false;
 
-  Map<String, dynamic>? _userProfile;
+  User? _userProfile;
   // ignore: unused_field
   bool _isLoadingProfile = true;
   

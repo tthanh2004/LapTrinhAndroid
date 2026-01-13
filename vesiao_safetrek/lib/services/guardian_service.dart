@@ -1,17 +1,20 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../common/constants.dart';
+import '../models/guardian_model.dart';
 
 class GuardianService {
   // Lấy danh sách người bảo vệ
-  Future<List<dynamic>> fetchGuardians(int userId) async {
+  Future<List<Guardian>> fetchGuardians(int userId) async {
     try {
       final response = await http.get(
         Uri.parse('${Constants.baseUrl}/emergency/guardians/$userId'),
       );
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final List<dynamic> data = jsonDecode(response.body);
+        // Map từ JSON sang List<Guardian>
+        return data.map((json) => Guardian.fromJson(json)).toList();
       } else {
         return [];
       }

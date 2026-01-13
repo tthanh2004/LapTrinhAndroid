@@ -1,24 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:geolocator/geolocator.dart'; 
-import '../common/constants.dart';
+import 'package:battery_plus/battery_plus.dart';
+import '../services/trip_service.dart';
+import '../services/emergency_service.dart';
 
 class TripController extends ChangeNotifier {
+  // Services
+  final TripService _tripService = TripService();
+  final EmergencyService _emergencyService = EmergencyService();
+
+  // State
   bool isMonitoring = false;
   int selectedMinutes = 15;
   int _remainingSeconds = 0;
   Timer? _timer;
   double progress = 1.0;
   String formattedTime = "15:00";
-  int? currentTripId; 
-  
-  // NƠI DUY NHẤT QUẢN LÝ BIẾN ĐẾM SAI PIN
+  int? currentTripId;
   int _pinErrorCount = 0;
 
-  final String baseUrl = Constants.baseUrl;
-
+  // Set thời gian trước khi đi
   void setDuration(int minutes) {
     if (!isMonitoring) {
       selectedMinutes = minutes;
@@ -27,101 +28,64 @@ class TripController extends ChangeNotifier {
     }
   }
 
-  // Hàm tăng số lần sai và trả về kết quả
-  int incrementPinError() {
-    _pinErrorCount++;
-    return _pinErrorCount;
-  }
-
+  // Bắt đầu chuyến đi
   Future<bool> startTrip({required int userId, String? destinationName}) async {
-    _pinErrorCount = 0; // Reset khi bắt đầu chuyến mới
+    // 1. Cập nhật UI ngay lập tức
     isMonitoring = true;
+    _pinErrorCount = 0;
     _remainingSeconds = selectedMinutes * 60;
     progress = 1.0;
     notifyListeners();
-    _startTimer();
+    _startTimer(userId); // Truyền userId vào để dùng khi hết giờ
 
+    // 2. Gọi API ngầm
     try {
-      final url = Uri.parse('$baseUrl/trips/start');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "userId": userId,
-          "durationMinutes": selectedMinutes,
-          "destinationName": destinationName ?? "Unknown Destination"
-        }),
-      );
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        currentTripId = data['tripId']; 
-        return true;
-      }
-      return false;
+      final data = await _tripService.startTripApi(userId, selectedMinutes, destinationName);
+      currentTripId = data['tripId'];
+      print("Trip Started: ID $currentTripId");
+      return true;
     } catch (e) {
+      print("Lỗi Start Trip: $e");
+      // Nếu lỗi mạng nghiêm trọng, có thể cân nhắc stopTrip() tại đây
       return false;
     }
   }
 
+  // Kết thúc chuyến đi (An toàn hoặc Bị ép buộc)
   Future<void> stopTrip({required bool isSafe}) async {
     isMonitoring = false;
     _timer?.cancel();
     notifyListeners();
 
-    if (currentTripId == null) return;
-
-    try {
-      await http.patch(
-        Uri.parse('$baseUrl/trips/$currentTripId/end'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"status": isSafe ? "COMPLETED_SAFE" : "DURESS_ENDED"}),
-      );
-    } catch (_) {}
-  }
-
-  Future<void> triggerPanic(int userId) async {
-    double lat = 0.0;
-    double lng = 0.0;
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      lat = position.latitude;
-      lng = position.longitude;
-    } catch (_) {}
-
-    try {
-      await http.post(
-        Uri.parse('$baseUrl/emergency/panic'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "userId": userId,
-          "lat": lat, 
-          "lng": lng, 
-          "tripId": currentTripId 
-        }),
-      );
-    } catch (_) {}
-  }
-
-  Future<String> verifyPin(int userId, String pin) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/trips/verify-pin'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"userId": userId, "pin": pin}),
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return data['status'] ?? "INVALID";
-      }
-      return "INVALID";
-    } catch (_) {
-      return "ERROR";
+    if (currentTripId != null) {
+      await _tripService.endTripApi(currentTripId!, isSafe ? "COMPLETED_SAFE" : "DURESS_ENDED");
     }
   }
 
-  void _startTimer() {
+  // Gửi Báo động khẩn cấp
+  Future<void> triggerPanic(int userId) async {
+    int battery = await Battery().batteryLevel;
+    // Gọi Service tái sử dụng
+    await _emergencyService.sendEmergencyAlert(
+      userId, 
+      tripId: currentTripId,
+      batteryLevel: battery
+    );
+  }
+
+  // Kiểm tra mã PIN
+  Future<String> verifyPin(int userId, String pin) async {
+    return await _tripService.verifyPinApi(userId, pin);
+  }
+
+  // Tăng biến đếm sai PIN
+  int incrementPinError() {
+    _pinErrorCount++;
+    return _pinErrorCount;
+  }
+
+  // Logic đếm ngược
+  void _startTimer(int userId) {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
@@ -132,7 +96,10 @@ class TripController extends ChangeNotifier {
         formattedTime = "${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}";
         notifyListeners();
       } else {
+        // HẾT GIỜ -> TỰ ĐỘNG BÁO ĐỘNG
         _timer?.cancel();
+        print("⏰ Hết giờ! Kích hoạt SOS tự động.");
+        triggerPanic(userId);
       }
     });
   }
