@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 export class TripsController {
   constructor(private readonly tripService: TripsService) {}
 
+  // Bắt đầu chuyến đi -> POST (Tạo mới trip)
   @Post('start')
   async startTrip(
     @Body()
@@ -22,16 +23,19 @@ export class TripsController {
     );
   }
 
+  // Kết thúc chuyến đi (Cập nhật trạng thái) -> PATCH (Chuẩn)
   @Patch(':id/end')
   async endTrip(@Body() body: { status: string }, @Param('id') id: string) {
     return this.tripService.endTripSafe(Number(id), body.status);
   }
 
+  // Xác thực PIN -> POST (Ngoại lệ bảo mật)
   @Post('verify-pin')
   async verifyPin(@Body() body: { userId: number; pin: string }) {
     return this.tripService.verifyPin(body.userId, body.pin);
   }
 
+  // Test Hash -> POST (Utility)
   @Post('hash-test')
   async hashTest(@Body() body: { pin: string }) {
     const salt = await bcrypt.genSalt();

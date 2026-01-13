@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Đăng ký - Tạo mới resource -> POST (Chuẩn)
   @Post('register')
   async register(
     @Body()
@@ -28,29 +29,36 @@ export class AuthController {
     return this.authService.register(body);
   }
 
-  @Post('verify-safe-pin')
-  async verifySafePin(@Body() body: { userId: number; pin: string }) {
-    return this.authService.verifySafePin(body.userId, body.pin);
-  }
-
+  // Đăng nhập -> POST (Chuẩn)
   @Post('login')
   async login(@Body() body: { identity: string; password: string }) {
     return this.authService.loginWithPassword(body.identity, body.password);
   }
 
-  // [MỚI] Lấy thông tin User (Profile)
+  // Lấy Profile -> GET (Chuẩn)
   @Get('profile/:id')
   async getProfile(@Param('id', ParseIntPipe) id: number) {
     return this.authService.getUserProfile(id);
   }
 
-  // [MỚI] Cập nhật FCM Token
+  // Cập nhật thông tin -> PATCH (Chuẩn)
+  @Patch('profile/:id')
+  async updateProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { fullName?: string; email?: string },
+  ) {
+    return this.authService.updateProfile(id, body);
+  }
+
+  // Cập nhật FCM Token -> PATCH (Chuẩn)
   @Patch('fcm-token')
   async updateFcmToken(@Body() body: { userId: number; token: string }) {
     return this.authService.updateFcmToken(body.userId, body.token);
   }
 
-  @Post('update-pins')
+  // [SỬA] Đổi mã PIN là hành động cập nhật -> Dùng PATCH
+  // URL đổi thành 'pins' cho ngắn gọn
+  @Patch('pins')
   async updatePins(
     @Body() body: { userId: number; safePin: string; duressPin: string },
   ) {
@@ -61,11 +69,9 @@ export class AuthController {
     );
   }
 
-  @Patch('profile/:id')
-  async updateProfile(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { fullName?: string; email?: string },
-  ) {
-    return this.authService.updateProfile(id, body);
+  // Xác thực PIN -> POST (Ngoại lệ bảo mật, chấp nhận được)
+  @Post('verify-safe-pin')
+  async verifySafePin(@Body() body: { userId: number; pin: string }) {
+    return this.authService.verifySafePin(body.userId, body.pin);
   }
 }

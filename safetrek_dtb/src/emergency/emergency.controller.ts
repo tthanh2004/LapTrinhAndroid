@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  Patch, // Import thêm Patch
 } from '@nestjs/common';
 import { EmergencyService } from './emergency.service';
 import { GuardianStatus } from '@prisma/client';
@@ -14,13 +15,13 @@ import { GuardianStatus } from '@prisma/client';
 export class EmergencyController {
   constructor(private readonly emergencyService: EmergencyService) {}
 
-  // 1. Lấy danh sách người bảo vệ
+  // 1. Lấy danh sách -> GET
   @Get('guardians/:userId')
   async getGuardians(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getGuardians(userId);
   }
 
-  // 2. Thêm người bảo vệ (Gửi lời mời)
+  // 2. Gửi lời mời (Tạo mới quan hệ) -> POST
   @Post('guardians')
   async addGuardian(
     @Body() body: { userId: number; name: string; phone: string },
@@ -32,30 +33,32 @@ export class EmergencyController {
     );
   }
 
-  // 3. Xóa người bảo vệ
+  // 3. Xóa người bảo vệ -> DELETE
   @Delete('guardians/:id')
   async deleteGuardian(@Param('id', ParseIntPipe) id: number) {
     return this.emergencyService.deleteGuardian(id);
   }
 
-  // 4. API Phản hồi (Chấp nhận/Từ chối lời mời)
-  @Post('guardians/respond')
+  // 4. [SỬA LỚN] Phản hồi lời mời -> PATCH
+  // URL: /emergency/guardians/:id/respond
+  // ID của guardian nằm trên URL, Status nằm trong Body
+  @Patch('guardians/:id/respond')
   async respondToRequest(
-    @Body() body: { guardianId: number; status: 'ACCEPTED' | 'REJECTED' },
+    @Param('id', ParseIntPipe) guardianId: number,
+    @Body() body: { status: 'ACCEPTED' | 'REJECTED' },
   ) {
     const statusEnum =
       body.status === 'ACCEPTED'
         ? GuardianStatus.ACCEPTED
         : GuardianStatus.REJECTED;
+
     return this.emergencyService.respondToGuardianRequest(
-      body.guardianId,
+      guardianId,
       statusEnum,
     );
   }
 
-  // ==========================================================
-  // 5. API Kích hoạt Panic (ĐÃ CẬP NHẬT THÊM tripId)
-  // ==========================================================
+  // 5. Kích hoạt Panic -> POST (Tạo ra 1 sự kiện panic)
   @Post('panic')
   async triggerPanic(
     @Body()
@@ -64,7 +67,7 @@ export class EmergencyController {
       lat: number;
       lng: number;
       tripId?: number;
-      batteryLevel?: number; // [QUAN TRỌNG] Thêm dòng này để nhận mức pin
+      batteryLevel?: number;
     },
   ) {
     return this.emergencyService.triggerPanicAlert(
@@ -72,35 +75,35 @@ export class EmergencyController {
       body.lat,
       body.lng,
       body.tripId,
-      body.batteryLevel, // Truyền sang service
+      body.batteryLevel,
     );
   }
-  // ==========================================================
 
-  // 6. Lấy danh sách thông báo
+  // 6. Lấy thông báo -> GET
   @Get('notifications/:userId')
   async getNotifications(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getUserNotifications(userId);
   }
 
-  // 7. Lấy danh sách người tôi đang bảo vệ
+  // 7. Lấy danh sách người tôi bảo vệ -> GET
   @Get('protecting/:userId')
   async getPeopleIProtect(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getPeopleIProtect(userId);
   }
 
-  // 8. API Đếm thông báo chưa đọc
+  // 8. Đếm chưa đọc -> GET
   @Get('notifications/unread/:userId')
   async getUnreadCount(@Param('userId', ParseIntPipe) userId: number) {
     return this.emergencyService.getUnreadCount(userId);
   }
 
-  // 9. API Đánh dấu tất cả đã đọc
-  @Post('notifications/read-all')
+  // 9. [SỬA] Đánh dấu đã đọc (Update status) -> PATCH
+  @Patch('notifications/read-all')
   async markAllRead(@Body() body: { userId: number }) {
     return this.emergencyService.markAllAsRead(body.userId);
   }
 
+  // 10. Gửi thông báo thủ công -> POST
   @Post('notifications/send')
   async sendNotification(
     @Body() body: { userId: number; title: string; body: string },
